@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
     context.file = fopen(filename, "w");
 
     long run_time = with_timer(&create_random_file, &context);
-    printf("blocksize=%ld, time=%ldms\n", block_size, run_time);
+    printf("%ld %ld\n", block_size, run_time);
     return 0;
 }
 
