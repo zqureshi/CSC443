@@ -1,51 +1,76 @@
+#include <time.h>
 #include <stdio.h>
+#include <stdlib.h>
+
+#include "library.h"
 
 /**
  * populate array with num_bytes bytes of random data.
  */
 void random_array(char *array, long num_bytes);
 
-/**
- * parse the given string of numbers into a long.
- */
-long parse_long(char *s);
+struct crf_ctx {
+    FILE *file;
+    long num_bytes;
+    long block_size;
+};
 
-int main(int argc, char *argv[])
+void create_random_file(void *context_)
 {
-    if (argc != 4)
-    {
-        printf("USAGE: %s <filename> <total bytes> <blocksize>\n", argv[0]);
-        return 1;
-    }
+    struct crf_ctx *context = (struct crf_ctx *) context_;
 
-    char *filename    = argv[1],
-         *num_bytes_  = argv[2],
-         *block_size_ = argv[3];
-
-    long num_bytes  = parse_long(num_bytes_),
-         block_size = parse_long(block_size_);
+    long num_bytes  = context->num_bytes,
+         block_size = context->block_size;
 
     char buffer[block_size];
     while (num_bytes > block_size)
     {
         random_array(buffer, block_size);
         num_bytes -= block_size;
-        // TODO write to file
+        fwrite(buffer, 1, block_size, context->file);
+        fflush(context->file);
     }
 
     random_array(buffer, num_bytes);
-    // TODO write to file
+    fwrite(buffer, 1, num_bytes, context->file);
+    fflush(context->file);
+}
 
+int main(int argc, char *argv[])
+{
+    // Initialize random seed
+    srand(time(NULL));
+
+    if (argc != 4)
+    {
+        printf("USAGE: %s <filename> <total bytes> <block size>\n", argv[0]);
+        return 1;
+    }
+
+    char *filename    = argv[1];
+    long num_bytes  = atol(argv[2]),
+         block_size = atol(argv[3]);
+
+    if (num_bytes <= 0 || block_size <= 0)
+    {
+        printf("Invalid block size or total number of bytes.\n");
+        return 1;
+    }
+
+    struct crf_ctx context;
+    context.num_bytes = num_bytes;
+    context.block_size = block_size;
+    context.file = fopen(filename, "w");
+
+    long run_time = with_timer(&create_random_file, &context);
+    printf("blocksize=%ld, time=%ldms\n", block_size, run_time);
     return 0;
 }
 
 void random_array(char *array, long num_bytes)
 {
-    // TODO [...]
-}
-
-long parse_long(char *s)
-{
-    // TODO [...]
-    return 0;
+    int i;
+    for (i = 0; i < num_bytes; i++) {
+        *(array + i) = (rand() % 26) + 'A';
+    }
 }
