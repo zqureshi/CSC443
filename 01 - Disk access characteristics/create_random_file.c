@@ -22,7 +22,13 @@ void create_random_file(void *context_)
     long num_bytes  = context->num_bytes,
          block_size = context->block_size;
 
-    char buffer[block_size];
+    char *buffer = calloc(1, block_size);
+    if (!buffer)
+    {
+        printf("Could not allocate buffer.\n");
+        return 1;
+    }
+
     while (num_bytes > block_size)
     {
         random_array(buffer, block_size);
@@ -34,6 +40,8 @@ void create_random_file(void *context_)
     random_array(buffer, num_bytes);
     fwrite(buffer, 1, num_bytes, context->file);
     fflush(context->file);
+
+    free(buffer);
 }
 
 int main(int argc, char *argv[])
@@ -64,6 +72,7 @@ int main(int argc, char *argv[])
 
     long run_time = with_timer(&create_random_file, &context);
     printf("%ld %ld\n", block_size, run_time);
+
     return 0;
 }
 
