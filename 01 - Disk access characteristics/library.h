@@ -12,4 +12,11 @@ long with_timer(void (*f)(void *), void *context);
  */
 long now();
 
+/**
+ * Populare array with num bytes.
+ *
+ * Assumes there is enough space in the array.
+ */
+void random_array(char *array, long num);
+
 #endif /* end of include guard: LIBRARY_H */

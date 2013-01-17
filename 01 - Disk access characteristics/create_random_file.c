@@ -4,11 +4,6 @@
 
 #include "library.h"
 
-/**
- * populate array with num_bytes bytes of random data.
- */
-void random_array(char *array, long num_bytes);
-
 struct crf_ctx {
     FILE *file;
     long num_bytes;
@@ -55,7 +50,8 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    char *filename    = argv[1];
+    // Parse args
+    char *filename  = argv[1];
     long num_bytes  = atol(argv[2]),
          block_size = atol(argv[3]);
 
@@ -76,10 +72,3 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-void random_array(char *array, long num_bytes)
-{
-    int i;
-    for (i = 0; i < num_bytes; i++) {
-        *(array + i) = (rand() % 26) + 'A';
-    }
-}
