@@ -1,4 +1,5 @@
 CC = gcc
+CPPFLAGS = -Wall
 TARGETS = create_random_file
 
 all: $(TARGETS)
@@ -6,8 +7,8 @@ all: $(TARGETS)
 clean:
 	rm -f $(TARGETS) *.o
 
-create_random_file: create_random_file.o library.o
+create_random_file: create_random_file.o
 	$(CC) -o $@ $^
 
 %.o: %.c
-	$(CC) -c -o $@ $<
+	$(CC) $(CPPFLAGS) -c -o $@ $<

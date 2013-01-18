@@ -1,74 +1,80 @@
-#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/timeb.h>
 
-#include "library.h"
-
-struct crf_ctx {
-    FILE *file;
-    long num_bytes;
-    long block_size;
-};
-
-void create_random_file(void *context_)
-{
-    struct crf_ctx *context = (struct crf_ctx *) context_;
-
-    long num_bytes  = context->num_bytes,
-         block_size = context->block_size;
-
-    char *buffer = calloc(1, block_size);
-    if (!buffer)
-    {
-        printf("Could not allocate buffer.\n");
-        return;
-    }
-
-    while (num_bytes > block_size)
-    {
-        random_array(buffer, block_size);
-        num_bytes -= block_size;
-        fwrite(buffer, 1, block_size, context->file);
-        fflush(context->file);
-    }
-
-    random_array(buffer, num_bytes);
-    fwrite(buffer, 1, num_bytes, context->file);
-    fflush(context->file);
-
-    free(buffer);
+/**
+ * Returns the current system time in milliseconds.
+ */
+inline long now() {
+    struct timeb t;
+    ftime(&t);
+    return t.time * 1000 + t.millitm;
 }
+
+/**
+ * Fills the given buffer with the given number of random characters between
+ * 'A' and 'Z'.
+ */
+void random_array(char *array, long num) {
+    while (num--)
+        *(array++) = (rand() % 26) + 'A';
+}
+
+
 
 int main(int argc, char *argv[])
 {
     // Initialize random seed
-    srand(time(NULL));
+    srand(now() / 1000);
 
-    if (argc != 4)
-    {
+    if (argc != 4) {
         printf("USAGE: %s <filename> <total bytes> <block size>\n", argv[0]);
         return 1;
     }
 
-    // Parse args
-    char *filename  = argv[1];
+    // Read arguments.
     long num_bytes  = atol(argv[2]),
          block_size = atol(argv[3]);
-
-    if (num_bytes <= 0 || block_size <= 0)
-    {
-        printf("Invalid block size or total number of bytes.\n");
+    if (num_bytes <= 0) {
+        printf("Invalid number of total bytes (%s).\n", argv[2]);
+        return 1;
+    }
+    if (block_size <= 0) {
+        printf("Invalid block size (%s).\n", argv[3]);
         return 1;
     }
 
-    struct crf_ctx context;
-    context.num_bytes = num_bytes;
-    context.block_size = block_size;
-    context.file = fopen(filename, "w");
+    // Open the file
+    char *filename = argv[1];
+    FILE *file     = fopen(filename, "w");
+    if (!file) {
+        printf("Could not open %s.\n", filename);
+        return 1;
+    }
 
-    long run_time = with_timer(&create_random_file, &context);
-    printf("%ld %ld\n", block_size, run_time);
 
+    char *buffer = calloc(1, block_size);
+    long start_time = now();
+
+    // Write to disk
+    while (num_bytes >= block_size) {
+        random_array(buffer, block_size);
+        fwrite(buffer, 1, block_size, file);
+        fflush(file);
+
+        num_bytes -= block_size;
+    }
+
+    // If any number of bytes is left, write that too.
+    if (num_bytes) {
+        random_array(buffer, num_bytes);
+        fwrite(buffer, 1, num_bytes, file);
+        fflush(file);
+    }
+
+    long end_time = now();
+    printf("%ld %ld\n", block_size, end_time - start_time);
+    fclose(file);
     return 0;
 }
 
