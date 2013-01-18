@@ -21,7 +21,7 @@ void create_random_file(void *context_)
     if (!buffer)
     {
         printf("Could not allocate buffer.\n");
-        return 1;
+        return;
     }
 
     while (num_bytes > block_size)
