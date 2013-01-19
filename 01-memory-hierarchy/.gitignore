@@ -1,3 +1,5 @@
 *.o
 *.swp
 create_random_file
+get_histogram
+noise
