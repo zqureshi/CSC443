@@ -18,3 +18,7 @@
 # Eclipse project files
 .cproject
 .project
+
+# PL1 targets
+create_random_file
+get_histogram
