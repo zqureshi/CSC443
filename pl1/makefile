@@ -1,5 +1,5 @@
 CC = g++
-OPTS = -Wall -std=c++03
+OPTS = -Wall -std=c++03 -g
 
 all: library.o create_random_file get_histogram
 
