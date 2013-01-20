@@ -17,7 +17,7 @@ int main(int argc, char *argv[]) {
   long total_bytes = atol(argv[2]);
   long block_size = atol(argv[3]);
 
-  char *buffer = (char *) calloc(1, sizeof(char) * block_size);
+  char buffer[block_size];
 
   while(total_bytes > 0) {
     random_array(buffer, block_size);
