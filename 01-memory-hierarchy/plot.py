@@ -13,6 +13,8 @@ def main():
 
     parser.add_argument('file', type=argparse.FileType('rb'), metavar='FILE',
             help="File containing the data collected by collect.py.")
+    parser.add_argument('--title', '-t', type=str, metavar='TITLE',
+            default='File Size: 100MB', help='Title for the plot.')
     parser.add_argument('--output', '-o', metavar='FILE', default=None,
             help=('Output file containing the plot. If absent, the plot will '
                 'be shown in a window.'))
@@ -27,7 +29,7 @@ def main():
     min_read  = min(zip(block_sizes,  read_times), key=SND)[0]
 
     fig = plt.figure()
-    fig.suptitle('Hard Drive; File Size: 100MB')
+    fig.suptitle(args.title)
 
     # Plot write times
     w_plot = fig.add_subplot(111)
