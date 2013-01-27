@@ -28,9 +28,9 @@ def main():
     rows = (map(int, row) for row in csv.reader(args.file))
     block_sizes, wtimes, rtimes = zip(*rows)
 
-    # Rate of writing in megabytes per second.
-    # x B/msec = 1000 * x B/sec = (1000 * x)/1048576 MB/sec.
-    to_rate = lambda t: FILE_SIZE / (t * 1048.576)
+    # Rate of writing in bytes per second.
+    # x B/msec = 1000 * x B/sec
+    to_rate = lambda t: FILE_SIZE * 1000.0/ float(t) 
 
     write_rates = [to_rate(t) for t in wtimes]
     read_rates  = [to_rate(t) for t in rtimes]
@@ -46,7 +46,7 @@ def main():
     w_plot = fig.add_subplot(111)
     (w_line,) = w_plot.semilogx(block_sizes, write_rates, 'b.-', basex=2)
     w_plot.set_xlabel('Block size')
-    w_plot.set_ylabel('Write rate (megabytes per second)', color='b')
+    w_plot.set_ylabel('Write rate (bytes per second)', color='b')
 
     # Mark off block size with the maximum write rate.
     if args.mark_max:
@@ -64,7 +64,7 @@ def main():
     # Plot read times
     r_plot = w_plot.twinx()
     (r_line,) = r_plot.semilogx(block_sizes, read_rates, 'g.-', basex=2)
-    r_plot.set_ylabel('Read rate (megabytes per second)', color='g')
+    r_plot.set_ylabel('Read rate (bytes per second)', color='g')
 
     # Mark off block size with maximum read rate.
     if args.mark_max:
@@ -80,7 +80,7 @@ def main():
         t.set_color('g')
 
     # Add a legend
-    fig.legend((w_line, r_line), ('Write', 'Read'))
+    fig.legend((w_line, r_line), ('Write', 'Read'), loc='lower right')
 
     if args.output is not None:
         fig.savefig(args.output)
