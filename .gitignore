@@ -13,3 +13,6 @@
 *.a
 .metadata
 .DS_Store
+
+# Vim swap file
+*.swp
