@@ -16,3 +16,7 @@
 
 # Vim swap file
 *.swp
+
+# Eclipse project files
+.project
+.cproject
