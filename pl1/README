@@ -1,0 +1,18 @@
+CSC 443: Practical Learning 1
+=============================
+
+  * Zeeshan Qureshi (997108954)
+  * Abhinav Gupta (998585963)
+
+Analysis
+========
+
+The data rate is low when we start at very small block sizes (10 bytes) since
+flushing data to disk is very inefficient asd does not align with the block
+size of the medium being written to. It increases as we go up to block sizes
+of 64K at which we get maximum throughput and then slowly starts to go down 
+as we try to flush more data than can be written at once on the medium.
+
+Optimal Read Block: 256K
+Optimal Write Block: 64K
+
