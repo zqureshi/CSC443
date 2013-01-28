@@ -7,7 +7,7 @@ OBJS = serializer.o
 all: $(OBJS)
 
 serializer.o: serializer.cc
-	$(CC) -c -o $@ $(CCFLAGS) $(INCLUDES) $^
+	$(CC) -c -o $@ $(CCFLAGS) $^
 
 clean:
 	rm -rf $(OBJS)

@@ -2,7 +2,7 @@
 #define SERIALIZER_H
 
 #include <vector>
-typedef const char* V;
+typedef const char * V;
 typedef std::vector<V> Record;
 
 /**
