@@ -84,10 +84,23 @@ int var_len_sizeof(Record *record) {
  *  the record using variable record encoding
  */
 void var_len_write(Record *record, void *buf) {
+    int *header = (int *) buf;
+    char *data = (char *) (header + SCHEMA_NUM_ATTRS);
+    for(int i = 0; i < SCHEMA_NUM_ATTRS; i++) {
+        int len = strlen(record->at(i));
+        header[i] = (int) (data - (char *) header);
+        memcpy(data, record->at(i), len);
+        data += len;
+    }
 }
 
 /**
  * Deserialize the `buf` which contains the variable record encoding.
  */
 void var_len_read(void *buf, int size, Record *record) {
+    int *header = (int *) buf;
+    for(int i = 0; i < SCHEMA_NUM_ATTRS; i++) {
+        memcpy((char *) record->at(i), (char *) buf + header[i], (i == SCHEMA_NUM_ATTRS-1 ? size : header[i+1]) - header[i]);
+        memset((char *) record->at(i) + (i == SCHEMA_NUM_ATTRS-1 ? size : header[i+1]) - header[i], '\0', 1);
+    }
 }
