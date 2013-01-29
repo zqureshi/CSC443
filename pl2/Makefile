@@ -3,7 +3,7 @@ CCFLAGS = -Wall -g
 OBJS = serializer.o
 
 INCLUDES_TEST = -I./
-LIBS_TEST = -pthread -lgtest
+LIBS_TEST = -pthread -lgtest -L.
 TARGETS_TEST = test_serializer
 
 ## Project Build
@@ -30,3 +30,19 @@ test_serializer: tests/serializer.cc serializer.o
 
 clean-test:
 	rm -rf $(TARGETS_TEST)
+
+## Google Test
+.PHONY: gtest clean-gtest
+
+gtest: libgtest.a
+
+clean-gtest:
+	rm -rf gtest libgtest.a
+
+libgtest.a:
+	mkdir -p tmp
+	cd tmp; wget http://googletest.googlecode.com/files/gtest-1.6.0.zip
+	cd tmp; unzip gtest-1.6.0.zip
+	cd tmp/gtest-1.6.0; cmake .; make
+	cp tmp/gtest-1.6.0/libgtest.a .
+	cp -R tmp/gtest-1.6.0/include/gtest gtest

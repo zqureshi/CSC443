@@ -1,0 +1,7 @@
+include
+lib
+tmp
+test_serializer.dSYM
+libgtest.a
+gtest/
+test_serializer
