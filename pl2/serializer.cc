@@ -10,6 +10,27 @@ using namespace std;
 #define SCHEMA_ATTR_SIZE SCHEMA_ATTR_LEN * sizeof(char)
 
 /**
+ * Allocate a Record and return pointer to it
+ */
+Record *alloc_record() {
+    Record *record = new Record(SCHEMA_NUM_ATTRS);
+    for(int i = 0; i < SCHEMA_NUM_ATTRS; i++) {
+        record->at(i) = new char[SCHEMA_ATTR_LEN];
+        memset((char *) record->at(i), '\0', SCHEMA_ATTR_LEN);
+    }
+    return record;
+}
+
+/**
+ * Free up record and its associated pointers.
+ */
+void free_record(Record *record) {
+    for(unsigned int i = 0; i < record->size(); i++)
+        delete [] record->at(i);
+    delete record;
+}
+
+/**
  * Inline implementation of fixed_len_sizeof()
  */
 inline int _fixed_len_sizeof(Record *record) {
