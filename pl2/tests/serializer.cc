@@ -61,6 +61,56 @@ TEST(VariableSerializer, FullRecordLengthTest) {
     free_record(record);
 }
 
+void variable_serialization_test(void (*populator)(Record *)) {
+    Record *recordIn = alloc_record(), *recordOut = alloc_record();
+
+    /* Populate Record */
+    populator(recordIn);
+
+    /* Serialize Record */
+    int recordLen = var_len_sizeof(recordIn);
+    char *buf = new char[recordLen];
+    var_len_write(recordIn, buf);
+
+    /* Deserialize Record */
+    var_len_read(buf, recordLen, recordOut);
+
+    /* Check Values */
+    ASSERT_EQ(recordLen, var_len_sizeof(recordOut));
+    for(int i = 0; i < SCHEMA_NUM_ATTRS; i++) {
+        ASSERT_STREQ(recordIn->at(i), recordOut->at(i));
+    }
+
+    delete [] buf;
+    free_record(recordIn);
+    free_record(recordOut);
+}
+
+void populate_full_record(Record *recordIn) {
+    for(int i = 0; i < SCHEMA_NUM_ATTRS; i++) {
+        sprintf((char *) recordIn->at(i), "%d", i);
+    }
+}
+
+void populate_sparse_record(Record *recordIn) {
+    strcpy((char *) recordIn->at(0), "hello");
+}
+
+void populate_empty_record(Record *recordIn) {
+}
+
+TEST(VariableSerializer, RoundtripSerializationTest) {
+    variable_serialization_test(&populate_full_record);
+}
+
+TEST(VariableSerializer, SparseRecordRoundtripSerializationTest) {
+    variable_serialization_test(&populate_sparse_record);
+}
+
+TEST(VariableSerializer, EmptyRecordRoundTripSerializationTest) {
+    variable_serialization_test(&populate_empty_record);
+}
+
 int main(int argc, char *argv[]) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
