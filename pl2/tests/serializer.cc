@@ -36,6 +36,31 @@ TEST(FixedSerializer, SerializationTest) {
     free_record(record);
 }
 
+TEST(VariableSerializer, EmptyRecordLengthTest) {
+    Record *record = alloc_record();
+    ASSERT_EQ(sizeof(int) * SCHEMA_NUM_ATTRS, var_len_sizeof(record));
+    free_record(record);
+}
+
+TEST(VariableSerializer, SparseRecordLengthTest) {
+    Record *record = alloc_record();
+    strcpy((char *) record->at(0), "hello");
+    ASSERT_EQ(sizeof(int) * SCHEMA_NUM_ATTRS + strlen("hello"), var_len_sizeof(record));
+    free_record(record);
+}
+
+TEST(VariableSerializer, FullRecordLengthTest) {
+    Record *record = alloc_record();
+
+    /* Populate record */
+    for(int i = 0; i < SCHEMA_NUM_ATTRS; i++) {
+        sprintf((char *) record->at(i), "%9d", i);
+    }
+
+    ASSERT_EQ(sizeof(int) * SCHEMA_NUM_ATTRS + 900, var_len_sizeof(record));
+    free_record(record);
+}
+
 int main(int argc, char *argv[]) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
