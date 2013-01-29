@@ -32,6 +32,7 @@ int fixed_len_sizeof(Record *record) {
 void fixed_len_write(Record *record, void *buf) {
     for(Record::iterator i = record->begin(); i != record->end(); i++) {
         memcpy(buf, *i, SCHEMA_ATTR_SIZE);
+        buf = (char *) buf + SCHEMA_ATTR_SIZE;
     }
 }
 
