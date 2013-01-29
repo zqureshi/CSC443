@@ -1,5 +1,5 @@
 CC = g++
-CCFLAGS = -Wall -g -std=c++03
+CCFLAGS = -Wall -g
 OBJS = serializer.o
 
 INCLUDES_TEST = -I./
@@ -11,8 +11,8 @@ TARGETS_TEST = test_serializer
 
 all: $(OBJS)
 
-serializer.o: serializer.cc
-	$(CC) -c -o $@ $(CCFLAGS) $^
+%.o: %.cc
+	$(CC) -c -o $@ $(CPPFLAGS) $^
 
 clean:
 	rm -rf $(OBJS) $(TARGETS_TEST)
