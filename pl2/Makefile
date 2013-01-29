@@ -14,8 +14,8 @@ all: $(OBJS)
 %.o: %.cc
 	$(CC) -c -o $@ $(CPPFLAGS) $^
 
-clean:
-	rm -rf $(OBJS) $(TARGETS_TEST)
+clean: clean-test
+	rm -rf $(OBJS)
 
 ## Testing Framework
 .PHONY: test run-test clean-test
@@ -29,7 +29,7 @@ test_serializer: tests/serializer.cc serializer.o
 	$(CC) -o $@ $(CCFLAGS) $(INCLUDES_TEST) $^ $(LIBS_TEST)
 
 clean-test:
-	rm -rf $(TARGETS_TEST)
+	rm -rf $(TARGETS_TEST) *.dSYM
 
 ## Google Test
 .PHONY: gtest clean-gtest
@@ -37,7 +37,7 @@ clean-test:
 gtest: libgtest.a
 
 clean-gtest:
-	rm -rf gtest libgtest.a
+	rm -rf gtest libgtest.a tmp
 
 libgtest.a:
 	mkdir -p tmp
