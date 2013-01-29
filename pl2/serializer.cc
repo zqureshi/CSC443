@@ -72,7 +72,12 @@ void fixed_len_read(void *buf, int size, Record *record) {
  * Compute the number of bytes required to serialize record
  */
 int var_len_sizeof(Record *record) {
-    return 0;
+    /* Fixed header overhead */
+    int length = sizeof(int) * SCHEMA_NUM_ATTRS;
+    for(int i = 0; i < SCHEMA_NUM_ATTRS; i++) {
+        length += strlen(record->at(i));
+    }
+    return length;
 }
 
 /**
