@@ -6,6 +6,7 @@
 using namespace std;
 
 #define SCHEMA_NUM_ATTRS 100
+#define SCHEMA_HDR_SIZE sizeof(int) * (SCHEMA_NUM_ATTRS + 1)
 #define SCHEMA_ATTR_LEN 10
 #define SCHEMA_ATTR_SIZE SCHEMA_ATTR_LEN * sizeof(char)
 
@@ -73,7 +74,7 @@ void fixed_len_read(void *buf, int size, Record *record) {
  */
 int var_len_sizeof(Record *record) {
     /* Fixed header overhead */
-    int length = sizeof(int) * SCHEMA_NUM_ATTRS;
+    int length = SCHEMA_HDR_SIZE;
     for(int i = 0; i < SCHEMA_NUM_ATTRS; i++) {
         length += strlen(record->at(i));
     }
@@ -85,13 +86,14 @@ int var_len_sizeof(Record *record) {
  */
 void var_len_write(Record *record, void *buf) {
     int *header = (int *) buf;
-    char *data = (char *) (header + SCHEMA_NUM_ATTRS);
+    char *data = (char *) header + SCHEMA_HDR_SIZE;
     for(int i = 0; i < SCHEMA_NUM_ATTRS; i++) {
         int len = strlen(record->at(i));
         header[i] = (int) (data - (char *) header);
         memcpy(data, record->at(i), len);
         data += len;
     }
+    header[SCHEMA_NUM_ATTRS] = (int) (data - (char *) header);
 }
 
 /**
@@ -100,7 +102,7 @@ void var_len_write(Record *record, void *buf) {
 void var_len_read(void *buf, int size, Record *record) {
     int *header = (int *) buf;
     for(int i = 0; i < SCHEMA_NUM_ATTRS; i++) {
-        memcpy((char *) record->at(i), (char *) buf + header[i], (i == SCHEMA_NUM_ATTRS-1 ? size : header[i+1]) - header[i]);
-        memset((char *) record->at(i) + (i == SCHEMA_NUM_ATTRS-1 ? size : header[i+1]) - header[i], '\0', 1);
+        memcpy((char *) record->at(i), (char *) buf + header[i], header[i+1] - header[i]);
+        memset((char *) record->at(i) + header[i+1] - header[i], '\0', 1);
     }
 }

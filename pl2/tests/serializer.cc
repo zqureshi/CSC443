@@ -6,6 +6,7 @@
 using namespace std;
 
 #define SCHEMA_NUM_ATTRS 100
+#define SCHEMA_HDR_SIZE sizeof(int) * (SCHEMA_NUM_ATTRS + 1)
 #define SCHEMA_ATTR_LEN 10
 #define SCHEMA_ATTR_SIZE SCHEMA_ATTR_LEN * sizeof(char)
 
@@ -38,14 +39,14 @@ TEST(FixedSerializer, SerializationTest) {
 
 TEST(VariableSerializer, EmptyRecordLengthTest) {
     Record *record = alloc_record();
-    ASSERT_EQ(sizeof(int) * SCHEMA_NUM_ATTRS, (unsigned int) var_len_sizeof(record));
+    ASSERT_EQ(SCHEMA_HDR_SIZE, (unsigned int) var_len_sizeof(record));
     free_record(record);
 }
 
 TEST(VariableSerializer, SparseRecordLengthTest) {
     Record *record = alloc_record();
     strcpy((char *) record->at(0), "hello");
-    ASSERT_EQ(sizeof(int) * SCHEMA_NUM_ATTRS + strlen("hello"), (unsigned int) var_len_sizeof(record));
+    ASSERT_EQ(SCHEMA_HDR_SIZE + strlen("hello"), (unsigned int) var_len_sizeof(record));
     free_record(record);
 }
 
@@ -57,7 +58,7 @@ TEST(VariableSerializer, FullRecordLengthTest) {
         sprintf((char *) record->at(i), "%9d", i);
     }
 
-    ASSERT_EQ(sizeof(int) * SCHEMA_NUM_ATTRS + 900, (unsigned int) var_len_sizeof(record));
+    ASSERT_EQ(SCHEMA_HDR_SIZE + 900, (unsigned int) var_len_sizeof(record));
     free_record(record);
 }
 
