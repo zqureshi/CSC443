@@ -37,7 +37,7 @@ clean-test:
 gtest: libgtest.a
 
 clean-gtest:
-	rm -rf gtest libgtest.a tmp
+	rm -rf gtest libgtest.a
 
 libgtest.a:
 	mkdir -p tmp
@@ -46,3 +46,4 @@ libgtest.a:
 	cd tmp/gtest-1.6.0; cmake .; make
 	cp tmp/gtest-1.6.0/libgtest.a .
 	cp -R tmp/gtest-1.6.0/include/gtest gtest
+	rm -rf tmp
