@@ -3,8 +3,8 @@
 
 using namespace std;
 
-inline int _fixed_page_len_capacity(int page_size, int slot_size) {
-    return page_size/(sizeof(char) + slot_size);
+inline int _fixed_page_len_capacity(Page *page) {
+    return page->page_size/(sizeof(char) + page->slot_size);
 }
 
 /**
@@ -17,14 +17,14 @@ void init_fixed_len_page(Page *page, int page_size, int slot_size) {
 
     /* Allocate memory and initialize slot directory */
     page->data = new char[page_size];
-    memset(page->data, 0, _fixed_page_len_capacity(page_size, slot_size));
+    memset(page->data, 0, _fixed_page_len_capacity(page));
 }
 
 /**
  * Calculates the maximal number of records that fit in a page
  */
 int fixed_len_page_capacity(Page *page) {
-    return _fixed_page_len_capacity(page->page_size, page->slot_size);
+    return _fixed_page_len_capacity(page);
 }
 
 /**

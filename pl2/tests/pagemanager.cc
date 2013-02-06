@@ -28,9 +28,9 @@ TEST(PageInit, PageInitialization) {
     Page p;
 
     init_fixed_len_page(&p, page_size, slot_size);
-    ASSERT_EQ(p.page_size, page_size);
-    ASSERT_EQ(p.slot_size, slot_size);
-    ASSERT_NE(p.data, (void *) NULL);
+    ASSERT_EQ(page_size, p.page_size);
+    ASSERT_EQ(slot_size, p.slot_size);
+    ASSERT_NE((void *) NULL, p.data);
 }
 
 int main(int argc, char *argv[]) {
