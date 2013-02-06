@@ -1,10 +1,11 @@
 CC = g++
 CCFLAGS = -Wall -g
 OBJS = serializer.o
+OBJS = serializer.o pagemanager.o
 
 INCLUDES_TEST = -I./
 LIBS_TEST = -pthread -lgtest -L.
-TARGETS_TEST = test_serializer
+TARGETS_TEST = test_serializer test_pagemanager
 
 ## Project Build
 .PHONY: all clean
@@ -25,7 +26,7 @@ test: $(TARGETS_TEST)
 run-test: test
 	for test in $(TARGETS_TEST); do ./$${test}; done
 
-test_serializer: tests/serializer.cc serializer.o
+test_%: tests/%.cc %.o
 	$(CC) -o $@ $(CCFLAGS) $(INCLUDES_TEST) $^ $(LIBS_TEST)
 
 clean-test:
