@@ -29,6 +29,9 @@ run-test: test
 test_%: tests/%.cc %.o
 	$(CC) -o $@ $(CCFLAGS) $(INCLUDES_TEST) $^ $(LIBS_TEST)
 
+test_pagemanager: serializer.o tests/pagemanager.cc pagemanager.o
+	$(CC) -o $@ $(CCFLAGS) $(INCLUDES_TEST) $^ $(LIBS_TEST)
+
 clean-test:
 	rm -rf $(TARGETS_TEST) *.dSYM
 
