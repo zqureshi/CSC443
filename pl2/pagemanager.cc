@@ -4,7 +4,7 @@
 
 using namespace std;
 
-inline int _fixed_page_len_capacity(Page *page) {
+inline int _capacity(Page *page) {
     return page->page_size/(sizeof(char) + page->slot_size);
 }
 
@@ -18,14 +18,14 @@ void init_fixed_len_page(Page *page, int page_size, int slot_size) {
 
     /* Allocate memory and initialize slot directory */
     page->data = new char[page_size];
-    memset(page->data, 0, _fixed_page_len_capacity(page));
+    memset(page->data, 0, _capacity(page));
 }
 
 /**
  * Calculates the maximal number of records that fit in a page
  */
 int fixed_len_page_capacity(Page *page) {
-    return _fixed_page_len_capacity(page);
+    return _capacity(page);
 }
 
 /**
@@ -34,7 +34,7 @@ int fixed_len_page_capacity(Page *page) {
 int fixed_len_page_freeslots(Page *page) {
     char *directory = (char *) page->data;
     int slots = 0;
-    for(int i = 0; i < _fixed_page_len_capacity(page); i++)
+    for(int i = 0; i < _capacity(page); i++)
         slots += 1 - directory[i];
     return slots;
 }
