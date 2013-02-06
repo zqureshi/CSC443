@@ -1,3 +1,4 @@
+#include <iostream>
 #include <cstring>
 #include "pagemanager.h"
 
@@ -31,8 +32,11 @@ int fixed_len_page_capacity(Page *page) {
  * Calculate the free space (number of free slots) in the page
  */
 int fixed_len_page_freeslots(Page *page) {
-    // TODO: Implement Method
-    return 0;
+    char *directory = (char *) page->data;
+    int slots = 0;
+    for(int i = 0; i < _fixed_page_len_capacity(page); i++)
+        slots += 1 - directory[i];
+    return slots;
 }
 
 /**

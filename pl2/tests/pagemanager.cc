@@ -33,6 +33,20 @@ TEST(PageInit, PageInitialization) {
     ASSERT_NE((void *) NULL, p.data);
 }
 
+TEST(PageSlots, EmptyPage) {
+    int page_size = 0, slot_size = 10;
+    Page p;
+    init_fixed_len_page(&p, page_size, slot_size);
+    ASSERT_EQ(0, fixed_len_page_freeslots(&p)) << "Empty page should have 0 free slots!";
+}
+
+TEST(PageSlots, NewPage) {
+    int page_size = 100, slot_size = 10;
+    Page p;
+    init_fixed_len_page(&p, page_size, slot_size);
+    ASSERT_EQ(fixed_len_page_capacity(&p), fixed_len_page_freeslots(&p)) << "Newly created page should have all slots free!";
+}
+
 int main(int argc, char *argv[]) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
