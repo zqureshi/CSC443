@@ -2,6 +2,10 @@
 
 using namespace std;
 
+inline int _fixed_page_len_capacity(int page_size, int slot_size) {
+    return page_size/(sizeof(char) + slot_size);
+}
+
 /**
  * Initializes a page using the given slot size
  */
@@ -13,8 +17,7 @@ void init_fixed_len_page(Page *page, int page_size, int slot_size) {
  * Calculates the maximal number of records that fit in a page
  */
 int fixed_len_page_capacity(Page *page) {
-    // TODO: Implement Method
-    return 0;
+    return _fixed_page_len_capacity(page->page_size, page->slot_size);
 }
 
 /**
