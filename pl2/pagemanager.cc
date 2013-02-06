@@ -1,3 +1,4 @@
+#include <cstring>
 #include "pagemanager.h"
 
 using namespace std;
@@ -10,7 +11,13 @@ inline int _fixed_page_len_capacity(int page_size, int slot_size) {
  * Initializes a page using the given slot size
  */
 void init_fixed_len_page(Page *page, int page_size, int slot_size) {
-    // TODO: Implement Method
+    /* Set page and slot sizes */
+    page->page_size = page_size;
+    page->slot_size = slot_size;
+
+    /* Allocate memory and initialize slot directory */
+    page->data = new char[page_size];
+    memset(page->data, 0, _fixed_page_len_capacity(page_size, slot_size));
 }
 
 /**

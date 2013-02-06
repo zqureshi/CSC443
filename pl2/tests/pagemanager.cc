@@ -23,6 +23,16 @@ TEST(PageCapacity, PageSize100SlotSize9) {
     ASSERT_EQ(10, fixed_len_page_capacity(&p)) << "10 * 9 (slots) + 10 (slots_directory) = 100";
 }
 
+TEST(PageInit, PageInitialization) {
+    int page_size = 100, slot_size = 10;
+    Page p;
+
+    init_fixed_len_page(&p, page_size, slot_size);
+    ASSERT_EQ(p.page_size, page_size);
+    ASSERT_EQ(p.slot_size, slot_size);
+    ASSERT_NE(p.data, (void *) NULL);
+}
+
 int main(int argc, char *argv[]) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
