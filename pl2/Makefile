@@ -1,6 +1,5 @@
 CC = g++
 CCFLAGS = -Wall -g
-OBJS = serializer.o
 OBJS = serializer.o pagemanager.o
 
 INCLUDES_TEST = -I./
