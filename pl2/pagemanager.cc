@@ -8,6 +8,10 @@ inline int _capacity(Page *page) {
     return page->page_size/(sizeof(char) + page->slot_size);
 }
 
+void *_slot_offset(Page *page, int slot) {
+    return (char *) page->data + _capacity(page) + page->slot_size * slot;
+}
+
 /**
  * Initializes a page using the given slot size
  */
@@ -46,20 +50,33 @@ int fixed_len_page_freeslots(Page *page) {
  *   -1 if unsuccessful (page full)
  */
 int add_fixed_len_page(Page *page, Record *r) {
-    // TODO: Implement Method
-    return 0;
+    /* If slot is smaller than serialized record we can't store it */
+    if(fixed_len_sizeof(r) > page->slot_size) {
+        return -1;
+    }
+
+    char *directory = (char *) page->data;
+    int slot = -1;
+    for(int i = 0; i < _capacity(page); i++) {
+        if(directory[i] == 0) {
+            directory[i] = 1;
+            return slot;
+        }
+    }
+
+    return slot;
 }
 
 /**
  * Write a record into a given slot.
  */
 void write_fixed_len_page(Page *page, int slot, Record *r) {
-    // TODO: Implement Method
+    fixed_len_write(r, _slot_offset(page, slot));
 }
 
 /**
  * Read a record from the page from a given slot.
  */
 void read_fixed_len_page(Page *page, int slot, Record *r) {
-    // TODO: Implement Method
+    fixed_len_read(_slot_offset(page, slot), fixed_len_sizeof(r),r);
 }
