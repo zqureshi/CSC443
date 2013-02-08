@@ -14,16 +14,6 @@ class Record : public std::vector<V> {
 };
 
 /**
- * Allocate a Record and return pointer to it
- */
-Record *alloc_record();
-
-/**
- * Free up record and its associated pointers.
- */
-void free_record(Record *record);
-
-/**
  * Compute the number of bytes required to serialize record
  */
 int fixed_len_sizeof(Record *record);

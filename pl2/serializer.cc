@@ -8,6 +8,9 @@
 #define SCHEMA_ATTR_LEN 10
 #define SCHEMA_ATTR_SIZE SCHEMA_ATTR_LEN * sizeof(char)
 
+/**
+ * Allocate a Record
+ */
 Record::Record() : std::vector<V>(SCHEMA_NUM_ATTRS) {
     for (size_t i = 0; i < SCHEMA_NUM_ATTRS; ++i) {
         at(i) = new char[SCHEMA_ATTR_LEN];
@@ -15,23 +18,12 @@ Record::Record() : std::vector<V>(SCHEMA_NUM_ATTRS) {
     }
 }
 
-Record::~Record() {
-    for (size_t i = 0; i < size(); ++i)
-        delete[] at(i);
-}
-
-/**
- * Allocate a Record and return pointer to it
- */
-Record *alloc_record() {
-    return new Record();
-}
-
 /**
  * Free up record and its associated pointers.
  */
-void free_record(Record *record) {
-    delete record;
+Record::~Record() {
+    for (size_t i = 0; i < size(); ++i)
+        delete[] at(i);
 }
 
 /**

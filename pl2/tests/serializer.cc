@@ -16,7 +16,7 @@ TEST(FixedSerializer, RecordLengthTest) {
 }
 
 TEST(FixedSerializer, SerializationTest) {
-    Record *record = alloc_record();
+    Record *record = new Record();
 
     /* Populate record */
     for(int i = 0; i < SCHEMA_NUM_ATTRS; i++) {
@@ -34,24 +34,24 @@ TEST(FixedSerializer, SerializationTest) {
 
     /* Free up memory */
     delete [] buf;
-    free_record(record);
+    delete record;
 }
 
 TEST(VariableSerializer, EmptyRecordLengthTest) {
-    Record *record = alloc_record();
+    Record *record = new Record();
     ASSERT_EQ(SCHEMA_HDR_SIZE, (unsigned int) var_len_sizeof(record));
-    free_record(record);
+    delete record;
 }
 
 TEST(VariableSerializer, SparseRecordLengthTest) {
-    Record *record = alloc_record();
+    Record *record = new Record();
     strcpy((char *) record->at(0), "hello");
     ASSERT_EQ(SCHEMA_HDR_SIZE + strlen("hello"), (unsigned int) var_len_sizeof(record));
-    free_record(record);
+    delete record;
 }
 
 TEST(VariableSerializer, FullRecordLengthTest) {
-    Record *record = alloc_record();
+    Record *record = new Record();
 
     /* Populate record */
     for(int i = 0; i < SCHEMA_NUM_ATTRS; i++) {
@@ -59,11 +59,11 @@ TEST(VariableSerializer, FullRecordLengthTest) {
     }
 
     ASSERT_EQ(SCHEMA_HDR_SIZE + 900, (unsigned int) var_len_sizeof(record));
-    free_record(record);
+    delete record;
 }
 
 void variable_serialization_test(void (*populator)(Record *)) {
-    Record *recordIn = alloc_record(), *recordOut = alloc_record();
+    Record *recordIn = new Record(), *recordOut = new Record();
 
     /* Populate Record */
     populator(recordIn);
@@ -83,8 +83,8 @@ void variable_serialization_test(void (*populator)(Record *)) {
     }
 
     delete [] buf;
-    free_record(recordIn);
-    free_record(recordOut);
+    delete recordIn;
+    delete recordOut;
 }
 
 void populate_full_record(Record *recordIn) {
