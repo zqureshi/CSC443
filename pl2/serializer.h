@@ -3,7 +3,15 @@
 
 #include <vector>
 typedef const char * V;
-typedef std::vector<V> Record;
+
+/**
+ * A Record is a vector of `V` values.
+ */
+class Record : public std::vector<V> {
+    public:
+        Record();
+        ~Record();
+};
 
 /**
  * Allocate a Record and return pointer to it

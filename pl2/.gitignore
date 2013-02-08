@@ -6,3 +6,4 @@ libgtest.a
 gtest/
 test_serializer
 test_pagemanager
+tags
