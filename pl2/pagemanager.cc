@@ -1,8 +1,5 @@
-#include <iostream>
 #include <cstring>
 #include "pagemanager.h"
-
-using namespace std;
 
 inline int _capacity(Page *page) {
     return page->page_size/(sizeof(char) + page->slot_size);
