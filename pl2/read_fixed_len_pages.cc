@@ -53,14 +53,9 @@ int main(int argc, char **argv) {
     init_fixed_len_page(&page, page_size, RECORD_SIZE);
 
     int capacity = fixed_len_page_capacity(&page);
+
+    fread(page.data, 1, page.page_size, pagef);
     while (!feof(pagef)) {
-        // Read page
-        if (fread(page.data, 1, page.page_size, pagef) != RECORD_SIZE &&
-                ferror(pagef)) {
-            printf("Error reading from file.\n");
-            fclose(pagef);
-            exit(1);
-        }
         page_count++;
 
         // Print records from the page
@@ -71,6 +66,8 @@ int main(int argc, char **argv) {
                 record_count++;
             }
         }
+
+        fread(page.data, 1, page.page_size, pagef);
     }
 
     long end_time = now();
