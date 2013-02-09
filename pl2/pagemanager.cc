@@ -87,7 +87,10 @@ void write_fixed_len_page(Page *page, int slot, Record *r) {
 /**
  * Read a record from the page from a given slot.
  */
-void read_fixed_len_page(Page *page, int slot, Record *r) {
+bool read_fixed_len_page(Page *page, int slot, Record *r) {
     assert(slot >= 0);
+    if (((char*)page->data)[slot] != 1)
+        return false;
     fixed_len_read(_slot_offset(page, slot), fixed_len_sizeof(r),r);
+    return true;
 }

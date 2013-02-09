@@ -40,6 +40,6 @@ void write_fixed_len_page(Page *page, int slot, Record *r);
 /**
  * Read a record from the page from a given slot.
  */
-void read_fixed_len_page(Page *page, int slot, Record *r);
+bool read_fixed_len_page(Page *page, int slot, Record *r);
 
 #endif
