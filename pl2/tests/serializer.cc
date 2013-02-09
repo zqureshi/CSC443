@@ -1,14 +1,10 @@
 #include <iostream>
 #include <cstring>
 #include "serializer.h"
+#include "constants.h"
 #include <gtest/gtest.h>
 
 using namespace std;
-
-#define SCHEMA_NUM_ATTRS 100
-#define SCHEMA_HDR_SIZE sizeof(int) * (SCHEMA_NUM_ATTRS + 1)
-#define SCHEMA_ATTR_LEN 10
-#define SCHEMA_ATTR_SIZE SCHEMA_ATTR_LEN * sizeof(char)
 
 TEST(FixedSerializer, RecordLengthTest) {
     Record r;

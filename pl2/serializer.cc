@@ -2,11 +2,7 @@
 #include <cassert>
 #include <vector>
 #include "serializer.h"
-
-#define SCHEMA_NUM_ATTRS 100
-#define SCHEMA_HDR_SIZE sizeof(int) * (SCHEMA_NUM_ATTRS + 1)
-#define SCHEMA_ATTR_LEN 10
-#define SCHEMA_ATTR_SIZE SCHEMA_ATTR_LEN * sizeof(char)
+#include "constants.h"
 
 /**
  * Allocate a Record

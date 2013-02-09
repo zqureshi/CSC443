@@ -2,8 +2,7 @@
 #include <gtest/gtest.h>
 #include "serializer.h"
 #include "pagemanager.h"
-
-#define SCHEMA_NUM_ATTRS 100
+#include "constants.h"
 
 TEST(PageCapacity, ZeroPageSize) {
     Page p = {NULL, 0, 10};
