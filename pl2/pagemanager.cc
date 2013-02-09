@@ -57,7 +57,10 @@ int add_fixed_len_page(Page *page, Record *r) {
     for(int i = 0; i < _capacity(page); i++) {
         if(directory[i] == 0) {
             directory[i] = 1;
-            return i;
+            slot = i;
+            write_fixed_len_page(page, slot, r);
+
+            break;
         }
     }
 
