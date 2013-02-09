@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 
 #include "serializer.h"
@@ -7,6 +8,11 @@
 
 // Number of bytes taken by a record.
 #define RECORD_SIZE 1000
+#define COLUMN_COUNT 100
+
+// Buffer needs to have enough space for the columns, the 9 commas, the
+// newline, and a \0.
+#define BUFFER_SIZE (RECORD_SIZE + COLUMN_COUNT + 1)
 
 int main(int argc, char **argv) {
     if (argc != 4) {
@@ -36,24 +42,21 @@ int main(int argc, char **argv) {
             added = 0;
         }
 
-        char buf[RECORD_SIZE];
+        char buf[BUFFER_SIZE];
         Record r;
 
-        int read_bytes = fread((void*)buf, 1, RECORD_SIZE, csvf);
-        if (read_bytes != RECORD_SIZE && ferror(csvf)) {
+        fgets(buf, BUFFER_SIZE, csvf);
+        if (ferror(csvf)) {
             printf("Error reading from file.\n");
             goto CLEAN;
         }
 
         // Fill the record with the CSV data
         int pos = 0;
-        char *start;
-        char *end;
-        for (start = end = buf; end < buf + read_bytes; end++) {
-            if (*end == ',') {
-                memcpy((char*)r.at(pos++), start, end - start);
-                start = end + 1; // +1 to skip the comma
-            }
+        char *tok = strtok(buf, ",");
+        while (tok != NULL) {
+            strcpy((char*)r.at(pos++), tok);
+            tok = strtok(NULL, ",");
         }
 
         int slot = add_fixed_len_page(&page, &r);
