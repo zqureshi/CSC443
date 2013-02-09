@@ -1,4 +1,5 @@
 #include <cstring>
+#include <cassert>
 #include "pagemanager.h"
 
 inline int _capacity(Page *page) {
@@ -75,6 +76,7 @@ int add_fixed_len_page(Page *page, Record *r) {
  * Write a record into a given slot.
  */
 void write_fixed_len_page(Page *page, int slot, Record *r) {
+    assert(slot >= 0);
     // Write the record and mark the slot as filled.
     fixed_len_write(r, _slot_offset(page, slot));
     char *directory = (char*) page->data;
@@ -85,5 +87,6 @@ void write_fixed_len_page(Page *page, int slot, Record *r) {
  * Read a record from the page from a given slot.
  */
 void read_fixed_len_page(Page *page, int slot, Record *r) {
+    assert(slot >= 0);
     fixed_len_read(_slot_offset(page, slot), fixed_len_sizeof(r),r);
 }

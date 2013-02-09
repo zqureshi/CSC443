@@ -1,7 +1,9 @@
-#include "pagemanager.h"
+#include <cstdio>
 #include <gtest/gtest.h>
+#include "serializer.h"
+#include "pagemanager.h"
 
-using namespace std;
+#define SCHEMA_NUM_ATTRS 100
 
 TEST(PageCapacity, ZeroPageSize) {
     Page p = {NULL, 0, 10};
@@ -45,6 +47,35 @@ TEST(PageSlots, NewPage) {
     Page p;
     init_fixed_len_page(&p, page_size, slot_size);
     ASSERT_EQ(fixed_len_page_capacity(&p), fixed_len_page_freeslots(&p)) << "Newly created page should have all slots free!";
+}
+
+TEST(PageRecords, AddRecord) {
+    int page_size = 2002, slot_size = 1000;
+    Page p;
+    init_fixed_len_page(&p, page_size, slot_size);
+
+    /* Populate record */
+    Record r1;
+    for(int i = 0; i < SCHEMA_NUM_ATTRS; i++)
+        sprintf((char *) r1.at(i), "1%8d", i);
+    int slot1 = add_fixed_len_page(&p, &r1);
+    ASSERT_EQ(0, slot1);
+
+    Record r2;
+    for(int i = 0; i < SCHEMA_NUM_ATTRS; i++)
+        sprintf((char *) r2.at(i), "2%8d", i);
+    int slot2 = add_fixed_len_page(&p, &r2);
+    ASSERT_EQ(1, slot2);
+
+    Record r1_read;
+    read_fixed_len_page(&p, slot1, &r1_read);
+    for (int i = 0; i < SCHEMA_NUM_ATTRS; ++i)
+        ASSERT_STREQ(r1.at(i), r1_read.at(i));
+
+    Record r2_read;
+    read_fixed_len_page(&p, slot2, &r2_read);
+    for (int i = 0; i < SCHEMA_NUM_ATTRS; ++i)
+        ASSERT_STREQ(r2.at(i), r2_read.at(i));
 }
 
 int main(int argc, char *argv[]) {
