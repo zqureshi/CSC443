@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <sys/timeb.h>
 
 #include "serializer.h"
 #include "pagemanager.h"
@@ -13,6 +14,15 @@
 // Buffer needs to have enough space for the columns, the 9 commas, the
 // newline, and a \0.
 #define BUFFER_SIZE (RECORD_SIZE + COLUMN_COUNT + 1)
+
+/**
+ * Returns the current system time in milliseconds.
+ */
+inline long now() {
+    struct timeb t;
+    ftime(&t);
+    return t.time * 1000 + t.millitm;
+}
 
 int main(int argc, char **argv) {
     if (argc != 4) {
@@ -29,16 +39,23 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+    long start_time = now();
+
     Page page;
     init_fixed_len_page(&page, page_size, RECORD_SIZE);
 
+    int total_records = 0;
+    int page_count = 0;
+
     int capacity = fixed_len_page_capacity(&page);
-    int added = 0;
+    int added = 0; // number of records added to the current page
     while (!feof(csvf)) {
         if (added == capacity) {
             // Write page to file and re-initialize.
             fwrite(page.data, 1, page.page_size, pagef);
             init_fixed_len_page(&page, page_size, RECORD_SIZE);
+            page_count++;
+            total_records += added;
             added = 0;
         }
 
@@ -48,7 +65,9 @@ int main(int argc, char **argv) {
         fgets(buf, BUFFER_SIZE, csvf);
         if (ferror(csvf)) {
             printf("Error reading from file.\n");
-            goto CLEAN;
+            fclose(csvf);
+            fclose(pagef);
+            exit(1);
         }
 
         // Fill the record with the CSV data
@@ -64,9 +83,19 @@ int main(int argc, char **argv) {
         assert(slot != -1);
     }
 
-    // TODO add output as required
+    // Unfilled pgae
+    if (added > 0) {
+        fwrite(page.data, 1, (1 + RECORD_SIZE) * added, pagef);
+        init_fixed_len_page(&page, page_size, RECORD_SIZE);
+        page_count++;
+        total_records += added;
+    }
 
-CLEAN:
+    long end_time = now();
+    printf("NUMBER OF RECORDS: %d\n", total_records);
+    printf("NUMBER OF PAGES: %d\n", page_count);
+    printf("TIME: %ld milliseconds\n", end_time - start_time);
+
     fclose(pagef);
     fclose(csvf);
     return 0;
