@@ -4,15 +4,19 @@ OBJS = serializer.o pagemanager.o heapmanager.o
 
 INCLUDES_TEST = -I./
 LIBS_TEST = -pthread -lgtest -L.
+TARGETS = write_fixed_len_pages
 TARGETS_TEST = test_serializer test_pagemanager test_heapmanager
 
 ## Project Build
 .PHONY: all clean
 
-all: $(OBJS)
+all: $(TARGETS) $(OBJS)
+
+write_fixed_len_pages: write_fixed_len_pages.o serializer.o pagemanager.o
+	$(CC) -o $@ $(CCFLAGS) $^
 
 %.o: %.cc
-	$(CC) -c -o $@ $(CPPFLAGS) $^
+	$(CC) -c -o $@ $(CCFLAGS) $^
 
 clean: clean-test
 	rm -rf $(OBJS)

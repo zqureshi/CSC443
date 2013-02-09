@@ -8,3 +8,4 @@ test_serializer
 test_pagemanager
 test_heapmanager
 tags
+write_fixed_len_pages
