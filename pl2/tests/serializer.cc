@@ -35,7 +35,7 @@ TEST(FixedSerializer, SerializationTest) {
 
 TEST(VariableSerializer, EmptyRecordLengthTest) {
     Record *record = new Record();
-    ASSERT_EQ(csvSchema.hdrSize, (unsigned int) var_len_sizeof(record));
+    ASSERT_EQ(csvSchema.hdrSize, var_len_sizeof(record));
     delete record;
 }
 
@@ -54,7 +54,7 @@ TEST(VariableSerializer, FullRecordLengthTest) {
         sprintf((char *) record->at(i), "%9d", i);
     }
 
-    ASSERT_EQ(csvSchema.hdrSize + 900, (unsigned int) var_len_sizeof(record));
+    ASSERT_EQ(csvSchema.hdrSize + 900, var_len_sizeof(record));
     delete record;
 }
 
