@@ -22,7 +22,7 @@ write_fixed_len_pages: write_fixed_len_pages.o serializer.o pagemanager.o
 	$(CC) -c -o $@ $(CCFLAGS) $^
 
 clean: clean-test
-	rm -rf $(OBJS)
+	rm -rf $(OBJS) $(TARGETS) $(TARGETS:%=%.o)
 
 ## Testing Framework
 .PHONY: test run-test clean-test
