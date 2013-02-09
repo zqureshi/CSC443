@@ -15,7 +15,7 @@ TEST(FixedSerializer, SerializationTest) {
     Record *record = new Record();
 
     /* Populate record */
-    for(int i = 0; i < SCHEMA_NUM_ATTRS; i++) {
+    for(int i = 0; i < csvSchema.numAttrs; i++) {
         sprintf((char *) record->at(i), "%9d", i);
     }
 
@@ -24,8 +24,8 @@ TEST(FixedSerializer, SerializationTest) {
     fixed_len_write(record, buf);
 
     /* Check whole blob */
-    for(int i = 0; i < SCHEMA_NUM_ATTRS; i++) {
-        ASSERT_STREQ(record->at(i), buf + i * SCHEMA_ATTR_LEN);
+    for(int i = 0; i < csvSchema.numAttrs; i++) {
+        ASSERT_STREQ(record->at(i), buf + i * csvSchema.attrLen);
     }
 
     /* Free up memory */
@@ -35,14 +35,14 @@ TEST(FixedSerializer, SerializationTest) {
 
 TEST(VariableSerializer, EmptyRecordLengthTest) {
     Record *record = new Record();
-    ASSERT_EQ(SCHEMA_HDR_SIZE, (unsigned int) var_len_sizeof(record));
+    ASSERT_EQ(csvSchema.hdrSize, (unsigned int) var_len_sizeof(record));
     delete record;
 }
 
 TEST(VariableSerializer, SparseRecordLengthTest) {
     Record *record = new Record();
     strcpy((char *) record->at(0), "hello");
-    ASSERT_EQ(SCHEMA_HDR_SIZE + strlen("hello"), (unsigned int) var_len_sizeof(record));
+    ASSERT_EQ(csvSchema.hdrSize + strlen("hello"), (unsigned int) var_len_sizeof(record));
     delete record;
 }
 
@@ -50,11 +50,11 @@ TEST(VariableSerializer, FullRecordLengthTest) {
     Record *record = new Record();
 
     /* Populate record */
-    for(int i = 0; i < SCHEMA_NUM_ATTRS; i++) {
+    for(int i = 0; i < csvSchema.numAttrs; i++) {
         sprintf((char *) record->at(i), "%9d", i);
     }
 
-    ASSERT_EQ(SCHEMA_HDR_SIZE + 900, (unsigned int) var_len_sizeof(record));
+    ASSERT_EQ(csvSchema.hdrSize + 900, (unsigned int) var_len_sizeof(record));
     delete record;
 }
 
@@ -74,7 +74,7 @@ void variable_serialization_test(void (*populator)(Record *)) {
 
     /* Check Values */
     ASSERT_EQ(recordLen, var_len_sizeof(recordOut));
-    for(int i = 0; i < SCHEMA_NUM_ATTRS; i++) {
+    for(int i = 0; i < csvSchema.numAttrs; i++) {
         ASSERT_STREQ(recordIn->at(i), recordOut->at(i));
     }
 
@@ -84,7 +84,7 @@ void variable_serialization_test(void (*populator)(Record *)) {
 }
 
 void populate_full_record(Record *recordIn) {
-    for(int i = 0; i < SCHEMA_NUM_ATTRS; i++) {
+    for(int i = 0; i < csvSchema.numAttrs; i++) {
         sprintf((char *) recordIn->at(i), "%d", i);
     }
 }
