@@ -1,10 +1,10 @@
 CC = g++
 CCFLAGS = -Wall -g
-OBJS = serializer.o pagemanager.o
+OBJS = serializer.o pagemanager.o heapmanager.o
 
 INCLUDES_TEST = -I./
 LIBS_TEST = -pthread -lgtest -L.
-TARGETS_TEST = test_serializer test_pagemanager
+TARGETS_TEST = test_serializer test_pagemanager test_heapmanager
 
 ## Project Build
 .PHONY: all clean
