@@ -10,8 +10,10 @@ void *_slot_offset(Page *page, int slot) {
     return (char *) page->data + _capacity(page) + page->slot_size * slot;
 }
 
-// Find an empty slot in the given page and return its index. Return -1 if
-// page is full.
+/**
+ * Find an empty slot in the given page and return its index. Return -1 if
+ * page is full.
+ */
 inline int _find_empty_slot(Page *page) {
     char *slot = (char*) page->data;
     for (int i = 0; i < _capacity(page); ++slot, ++i)
@@ -77,7 +79,7 @@ int add_fixed_len_page(Page *page, Record *r) {
  */
 void write_fixed_len_page(Page *page, int slot, Record *r) {
     assert(slot >= 0);
-    // Write the record and mark the slot as filled.
+    /* Write the record and mark the slot as filled. */
     fixed_len_write(r, _slot_offset(page, slot));
     ((char*) page->data)[slot] = 1;
 }
