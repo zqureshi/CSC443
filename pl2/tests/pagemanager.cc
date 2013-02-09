@@ -79,7 +79,3 @@ TEST(PageRecords, RecordManagement) {
         ASSERT_STREQ(r2.at(i), r2_read.at(i));
 }
 
-int main(int argc, char *argv[]) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}

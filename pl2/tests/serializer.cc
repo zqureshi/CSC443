@@ -107,8 +107,3 @@ TEST(VariableSerializer, SparseRecordRoundtripSerializationTest) {
 TEST(VariableSerializer, EmptyRecordRoundTripSerializationTest) {
     variable_serialization_test(&populate_empty_record);
 }
-
-int main(int argc, char *argv[]) {
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}

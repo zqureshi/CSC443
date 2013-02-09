@@ -25,10 +25,7 @@ test: $(TARGETS_TEST)
 run-test: test
 	for test in $(TARGETS_TEST); do ./$${test}; done
 
-test_%: tests/%.cc %.o
-	$(CC) -o $@ $(CCFLAGS) $(INCLUDES_TEST) $^ $(LIBS_TEST)
-
-test_pagemanager: serializer.o tests/pagemanager.cc pagemanager.o
+test_%: tests/%.cc tests/runner.cc $(OBJS)
 	$(CC) -o $@ $(CCFLAGS) $(INCLUDES_TEST) $^ $(LIBS_TEST)
 
 clean-test:
