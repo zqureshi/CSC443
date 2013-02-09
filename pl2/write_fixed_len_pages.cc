@@ -1,8 +1,10 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 #include <sys/timeb.h>
+#include <sstream>
+#include <fstream>
+#include <string>
 
 #include "serializer.h"
 #include "pagemanager.h"
@@ -32,7 +34,7 @@ int main(int argc, char **argv) {
 
     size_t page_size = atoi(argv[3]);
 
-    FILE *csvf = fopen(argv[1], "r");
+    std::ifstream csvf(argv[1]);
     FILE *pagef = fopen(argv[2], "w");
     if (!csvf || !pagef) {
         printf("Error opening file(s).\n");
@@ -49,24 +51,28 @@ int main(int argc, char **argv) {
 
     int capacity = fixed_len_page_capacity(&page);
     int added = 0; // number of records added to the current page
-    while (!feof(csvf)) {
-        char buf[BUFFER_SIZE];
+    while (csvf) {
         Record r;
 
-        fgets(buf, BUFFER_SIZE, csvf);
-        if (ferror(csvf)) {
-            printf("Error reading from file.\n");
-            fclose(csvf);
-            fclose(pagef);
-            exit(1);
-        }
+        std::string buf;
+        buf.reserve(RECORD_SIZE);
+
+        if (!std::getline(csvf, buf))
+            break;
 
         // Fill the record with the CSV data
+        std::istringstream stream(buf);
+
+        // Not using strtok anymore. Major bug:
+        //      strtok is repeating the first column of the last row after
+        //      returning the last column of the last row. I have no idea why.
+        //
+        // Yeah... that was fun to track down.
         int pos = 0;
-        char *tok = strtok(buf, ",");
-        while (tok != NULL) {
-            strcpy((char*)r.at(pos++), tok);
-            tok = strtok(NULL, ",");
+        while (stream) {
+            char attr[11];
+            if (!stream.getline(attr, 11, ',')) break;
+            strcpy((char*)r.at(pos++), attr);
         }
 
         int slot = add_fixed_len_page(&page, &r);
@@ -96,6 +102,6 @@ int main(int argc, char **argv) {
     printf("TIME: %ld milliseconds\n", end_time - start_time);
 
     fclose(pagef);
-    fclose(csvf);
+    csvf.close();
     return 0;
 }
