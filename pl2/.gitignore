@@ -9,3 +9,4 @@ test_pagemanager
 test_heapmanager
 tags
 write_fixed_len_pages
+read_fixed_len_pages

@@ -39,18 +39,17 @@ int main(int argc, char **argv) {
         char buf[RECORD_SIZE];
         Record r;
 
-        if (fread((void*)buf, 1, RECORD_SIZE, csvf) != RECORD_SIZE) {
-            if (ferror(csvf)) {
-                printf("Error reading from file.\n");
-                goto CLEAN;
-            }
+        int read_bytes = fread((void*)buf, 1, RECORD_SIZE, csvf);
+        if (read_bytes != RECORD_SIZE && ferror(csvf)) {
+            printf("Error reading from file.\n");
+            goto CLEAN;
         }
 
         // Fill the record with the CSV data
         int pos = 0;
         char *start;
         char *end;
-        for (start = end = buf; end < buf + RECORD_SIZE; end++) {
+        for (start = end = buf; end < buf + read_bytes; end++) {
             if (*end == ',') {
                 memcpy((char*)r.at(pos++), start, end - start);
                 start = end + 1; // +1 to skip the comma
@@ -61,6 +60,8 @@ int main(int argc, char **argv) {
         added++;
         assert(slot != -1);
     }
+
+    // TODO add output as required
 
 CLEAN:
     fclose(pagef);
