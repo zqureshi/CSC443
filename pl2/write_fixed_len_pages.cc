@@ -50,15 +50,6 @@ int main(int argc, char **argv) {
     int capacity = fixed_len_page_capacity(&page);
     int added = 0; // number of records added to the current page
     while (!feof(csvf)) {
-        if (added == capacity) {
-            // Write page to file and re-initialize.
-            fwrite(page.data, 1, page.page_size, pagef);
-            init_fixed_len_page(&page, page_size, RECORD_SIZE);
-            page_count++;
-            total_records += added;
-            added = 0;
-        }
-
         char buf[BUFFER_SIZE];
         Record r;
 
@@ -81,12 +72,20 @@ int main(int argc, char **argv) {
         int slot = add_fixed_len_page(&page, &r);
         added++;
         assert(slot != -1);
+
+        if (added == capacity) {
+            // Write page to file and re-initialize.
+            fwrite(page.data, 1, page.page_size, pagef);
+            init_fixed_len_page(&page, page_size, RECORD_SIZE);
+            page_count++;
+            total_records += added;
+            added = 0;
+        }
     }
 
     // Unfilled pgae
     if (added > 0) {
         fwrite(page.data, 1, (1 + RECORD_SIZE) * added, pagef);
-        init_fixed_len_page(&page, page_size, RECORD_SIZE);
         page_count++;
         total_records += added;
     }
