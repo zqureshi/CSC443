@@ -79,8 +79,7 @@ void write_fixed_len_page(Page *page, int slot, Record *r) {
     assert(slot >= 0);
     // Write the record and mark the slot as filled.
     fixed_len_write(r, _slot_offset(page, slot));
-    char *directory = (char*) page->data;
-    directory[slot] = 1;
+    ((char*) page->data)[slot] = 1;
 }
 
 /**
