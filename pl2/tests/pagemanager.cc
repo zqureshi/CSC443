@@ -49,7 +49,7 @@ TEST(PageSlots, NewPage) {
     ASSERT_EQ(fixed_len_page_capacity(&p), fixed_len_page_freeslots(&p)) << "Newly created page should have all slots free!";
 }
 
-TEST(PageRecords, AddRecord) {
+TEST(PageRecords, RecordManagement) {
     int page_size = 2002, slot_size = 1000;
     Page p;
     init_fixed_len_page(&p, page_size, slot_size);
@@ -66,6 +66,8 @@ TEST(PageRecords, AddRecord) {
         sprintf((char *) r2.at(i), "2%8d", i);
     int slot2 = add_fixed_len_page(&p, &r2);
     ASSERT_EQ(1, slot2);
+
+    ASSERT_EQ(-1, add_fixed_len_page(&p, &r2));
 
     Record r1_read;
     read_fixed_len_page(&p, slot1, &r1_read);
