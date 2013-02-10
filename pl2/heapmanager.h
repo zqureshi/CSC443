@@ -19,7 +19,7 @@ typedef struct {
 /**
  * Initalize a heapfile to use the file and page size given.
  */
-void init_heapfile(Heapfile *heapfile, int page_size, FILE *file);
+void init_heapfile(Heapfile *heapfile, int page_size, FILE *file, bool newHeap = false);
 
 /**
  * Allocate another page in the heapfile.  This grows the file by a page.

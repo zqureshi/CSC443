@@ -36,7 +36,7 @@ test_%: tests/%.cc tests/runner.cc $(OBJS)
 	$(CC) -o $@ $(CCFLAGS) $(INCLUDES_TEST) $^ $(LIBS_TEST)
 
 clean-test:
-	rm -rf $(TARGETS_TEST) *.dSYM
+	rm -rf $(TARGETS_TEST) *.dSYM *.test.heap
 
 ## Google Test
 .PHONY: gtest clean-gtest
