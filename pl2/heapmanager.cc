@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstring>
+#include <cstdio>
 #include "heapmanager.h"
 
 typedef struct {
@@ -8,17 +9,28 @@ typedef struct {
     unsigned int sig2;
 } DirHdr;
 
+typedef struct {
+    int pageId;
+    int offset;
+    int slots;
+} DirRecord;
+
 Schema heapSchema(3, 4);
 
-inline int _get_new_id() {
-    static int id = 0;
+inline PageID _get_new_id() {
+    static PageID id = 0;
     return id++;
 }
 
-Page *_init_page(Heapfile *heapfile) {
+Page *_init_page(Heapfile *heapfile, Schema schema = heapSchema) {
     Page *page = new Page;
-    init_fixed_len_page(page, heapfile->page_size, heapSchema.numAttrs * heapSchema.attrLen);
+    init_fixed_len_page(page, heapfile->page_size, schema.numAttrs * schema.attrLen);
     return page;
+}
+
+void _free_page(Page *page) {
+    delete [] (char *) page->data;
+    delete page;
 }
 
 /**
@@ -62,5 +74,53 @@ void init_heapfile(Heapfile *heapfile, int page_size, FILE *file, bool newHeap) 
     }
 
     /* Release memory for pages */
-    delete [] (char *) (directory->data);
+    _free_page(directory);
+}
+
+/**
+ * Allocate another page in the heapfile.  This grows the file by a page.
+ *
+ * TODO: Support overflows by linking directory pages.
+ */
+PageID alloc_page(Heapfile *heapfile) {
+    FILE *file = heapfile->file_ptr;
+    int page_size = heapfile->page_size;
+    int slot;
+
+    /* Allocate page */
+    Page *page = _init_page(heapfile, csvSchema);
+
+    /* Create directory record */
+    fseek(file, 0, SEEK_END);
+    int offset = ftell(file);
+    PageID pageId = _get_new_id();
+    Record dirRecord(heapSchema);
+    DirRecord *pageRecord = (DirRecord *) dirRecord.at(0);
+
+    pageRecord->pageId = pageId;
+    pageRecord->offset = offset;
+    pageRecord->slots = fixed_len_page_freeslots(page);
+
+    /* Load primary directory and add page record */
+    Page *directory = _init_page(heapfile);
+    fseek(file, 0, SEEK_SET);
+    fread(directory->data, page_size, 1, file);
+
+    if((slot = add_fixed_len_page(directory, &dirRecord, heapSchema)) == -1)
+        return -1;
+
+    /* Write directory to disk */
+    fseek(file, 0, SEEK_SET);
+    fwrite(directory->data, page_size, 1, file);
+
+    /* Append page to file */
+    fseek(file, offset, SEEK_SET);
+    fwrite(page->data, page_size, 1, file);
+    fflush(file);
+
+    /* Free pages */
+    _free_page(page);
+    _free_page(directory);
+
+    return pageId;
 }
