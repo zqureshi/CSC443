@@ -4,7 +4,8 @@
 
 typedef struct {
     int next;
-    long long signature;
+    int sig1;
+    int sig2;
 } DirHdr;
 
 Schema heapSchema(3, 4);
@@ -32,7 +33,8 @@ void init_heapfile(Heapfile *heapfile, int page_size, FILE *file, bool newHeap) 
         Record hdrRecord(heapSchema);
         DirHdr *dirHdr = (DirHdr *) (hdrRecord.at(0));
         dirHdr->next = DIRHDR_NULL;
-        dirHdr->signature = DIRHDR_SIGNATURE;
+        dirHdr->sig1 = DIRHDR_SIG1;
+        dirHdr->sig2 = DIRHDR_SIG2;
 
         /* Populate directory header and make sure it's at the first slot */
         assert(0 == add_fixed_len_page(&directory, &hdrRecord, heapSchema));
@@ -50,7 +52,8 @@ void init_heapfile(Heapfile *heapfile, int page_size, FILE *file, bool newHeap) 
         assert(true == read_fixed_len_page(&directory, 0, &hdrRecord, heapSchema));
 
         DirHdr *dirHdr = (DirHdr *) (hdrRecord.at(0));
-        assert(dirHdr->signature == DIRHDR_SIGNATURE);
+        assert(dirHdr->sig1 == DIRHDR_SIG1);
+        assert(dirHdr->sig2 == DIRHDR_SIG2);
     }
 
     /* Release memory for pages */
