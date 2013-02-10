@@ -4,8 +4,8 @@
 
 typedef struct {
     int next;
-    int sig1;
-    int sig2;
+    unsigned int sig1;
+    unsigned int sig2;
 } DirHdr;
 
 Schema heapSchema(3, 4);
