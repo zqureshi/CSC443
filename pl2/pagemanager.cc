@@ -59,15 +59,15 @@ int fixed_len_page_freeslots(Page *page) {
  *   record slot offset if successful,
  *   -1 if unsuccessful (page full)
  */
-int add_fixed_len_page(Page *page, Record *r) {
+int add_fixed_len_page(Page *page, Record *r, Schema schema) {
     /* If slot is smaller than serialized record we can't store it */
-    if(fixed_len_sizeof(r) > page->slot_size) {
+    if(fixed_len_sizeof(r, schema) > page->slot_size) {
         return -1;
     }
 
     int slot;
     if ((slot = _find_empty_slot(page)) != -1) {
-        write_fixed_len_page(page, slot, r);
+        write_fixed_len_page(page, slot, r, schema);
         return slot;
     }
 
@@ -77,20 +77,20 @@ int add_fixed_len_page(Page *page, Record *r) {
 /**
  * Write a record into a given slot.
  */
-void write_fixed_len_page(Page *page, int slot, Record *r) {
+void write_fixed_len_page(Page *page, int slot, Record *r, Schema schema) {
     assert(slot >= 0);
     /* Write the record and mark the slot as filled. */
-    fixed_len_write(r, _slot_offset(page, slot));
+    fixed_len_write(r, _slot_offset(page, slot), schema);
     ((char*) page->data)[slot] = 1;
 }
 
 /**
  * Read a record from the page from a given slot.
  */
-bool read_fixed_len_page(Page *page, int slot, Record *r) {
+bool read_fixed_len_page(Page *page, int slot, Record *r, Schema schema) {
     assert(slot >= 0);
     if (((char*)page->data)[slot] != 1)
         return false;
-    fixed_len_read(_slot_offset(page, slot), fixed_len_sizeof(r),r);
+    fixed_len_read(_slot_offset(page, slot), fixed_len_sizeof(r, schema), r, schema);
     return true;
 }
