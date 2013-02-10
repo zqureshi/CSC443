@@ -4,7 +4,7 @@
 
 typedef struct {
     int next;
-    long signature;
+    long long signature;
 } DirHdr;
 
 Schema heapSchema(3, 4);
@@ -50,7 +50,7 @@ void init_heapfile(Heapfile *heapfile, int page_size, FILE *file, bool newHeap) 
         assert(true == read_fixed_len_page(&directory, 0, &hdrRecord, heapSchema));
 
         DirHdr *dirHdr = (DirHdr *) (hdrRecord.at(0));
-        assert(dirHdr->signature == (long) DIRHDR_SIGNATURE);
+        assert(dirHdr->signature == DIRHDR_SIGNATURE);
     }
 
     /* Release memory for pages */
