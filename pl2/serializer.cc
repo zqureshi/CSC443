@@ -19,8 +19,9 @@ Schema::Schema(int numAttrs, int attrLen) {
  * Allocate a Record
  */
 Record::Record(Schema schema) : std::vector<V>(schema.numAttrs) {
+    char *block = new char[schema.numAttrs * schema.attrLen];
     for (int i = 0; i < schema.numAttrs; ++i) {
-        at(i) = new char[schema.attrLen];
+        at(i) = block + schema.attrLen * i;
         memset((char*) at(i), 0, schema.attrLen);
     }
 }
@@ -29,8 +30,7 @@ Record::Record(Schema schema) : std::vector<V>(schema.numAttrs) {
  * Free up record and its associated pointers.
  */
 Record::~Record() {
-    for (size_t i = 0; i < size(); ++i)
-        delete[] at(i);
+    delete [] at(0);
 }
 
 /**
