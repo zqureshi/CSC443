@@ -20,9 +20,10 @@ Schema::Schema(int numAttrs, int attrLen) {
  */
 Record::Record(Schema schema) : std::vector<V>(schema.numAttrs) {
     char *block = new char[schema.numAttrs * schema.attrLen];
+    memset(block, 0, schema.numAttrs * schema.attrLen);
+
     for (int i = 0; i < schema.numAttrs; ++i) {
         at(i) = block + schema.attrLen * i;
-        memset((char*) at(i), 0, schema.attrLen);
     }
 }
 

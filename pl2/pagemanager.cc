@@ -32,7 +32,7 @@ void init_fixed_len_page(Page *page, int page_size, int slot_size) {
 
     /* Allocate memory and initialize slot directory */
     page->data = new char[page_size];
-    memset(page->data, 0, _capacity(page));
+    memset(page->data, 0, page_size);
 }
 
 /**
