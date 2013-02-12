@@ -38,15 +38,16 @@ def main():
 
     # Plot write times
     w_plot = fig.add_subplot(111)
-    (w_line,) = w_plot.semilogx(page_sizes, write_rates, 'b.-', basex=2)
-    w_plot.set_xlabel('Page size')
+    (w_line,) = w_plot.semilogx(page_sizes, write_rates, 'b.-', basex=2,
+                                linewidth=2)
+    w_plot.set_xlabel('Page size (bytes)')
     w_plot.set_ylabel('Write rate (records per second)', color='b')
 
     # Mark off block size with the maximum write rate.
     if args.mark_max:
         w_plot.plot([max_write[0]] * 2 + [w_plot.get_xlim()[0]],
                     [w_plot.get_ylim()[0]] + [max_write[1]] * 2,
-                    color='b', linestyle=':')
+                    color='b', linestyle=':', linewidth=2)
         w_plot.annotate('$2^{%d}$' % log2(max_write[0]), fontsize=15,
                         xy=max_write, verticalalignment='bottom',
                         horizontalalignment='center')
@@ -57,7 +58,8 @@ def main():
 
     # Plot read times
     r_plot = w_plot.twinx()
-    (r_line,) = r_plot.semilogx(page_sizes, read_rates, 'g.-', basex=2)
+    (r_line,) = r_plot.semilogx(page_sizes, read_rates, 'g.-', basex=2,
+                                linewidth=2)
     r_plot.set_ylabel('Read rate (records per second)', color='g')
 
     # Add a little wiggle room to the read time Y limits
@@ -69,7 +71,7 @@ def main():
     if args.mark_max:
         r_plot.plot([max_read[0]] * 2 + [r_plot.get_xlim()[1]],
                     [r_plot.get_ylim()[0]] + [max_read[1]] * 2,
-                    color='g', linestyle=':')
+                    color='g', linestyle=':', linewidth=2)
         r_plot.annotate('$2^{%d}$' % log2(max_read[0]), fontsize=15,
                         xy=max_read, verticalalignment='bottom',
                         horizontalalignment='center')
@@ -79,7 +81,7 @@ def main():
         t.set_color('g')
 
     # Add a legend
-    fig.legend((w_line, r_line), ('Write', 'Read'), loc='lower right')
+    fig.legend((w_line, r_line), ('Write', 'Read'), loc='upper right')
 
     if args.output is not None:
         fig.savefig(args.output)
