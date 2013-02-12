@@ -48,8 +48,8 @@ def main():
                     [w_plot.get_ylim()[0]] + [max_write[1]] * 2,
                     color='b', linestyle=':')
         w_plot.annotate('$2^{%d}$' % log2(max_write[0]), fontsize=15,
-                        xy=max_write, verticalalignment='top',
-                        horizontalalignment='left')
+                        xy=max_write, verticalalignment='bottom',
+                        horizontalalignment='center')
 
     # Color the write time ticks blue
     for t in w_plot.get_yticklabels():
@@ -57,7 +57,7 @@ def main():
 
     # Plot read times
     r_plot = w_plot.twinx()
-    (r_line,) = r_plot.loglog(page_sizes, read_rates, 'g.-', basex=2, basey=2)
+    (r_line,) = r_plot.semilogx(page_sizes, read_rates, 'g.-', basex=2)
     r_plot.set_ylabel('Read rate (records per second)', color='g')
 
     # Add a little wiggle room to the read time Y limits
@@ -71,8 +71,8 @@ def main():
                     [r_plot.get_ylim()[0]] + [max_read[1]] * 2,
                     color='g', linestyle=':')
         r_plot.annotate('$2^{%d}$' % log2(max_read[0]), fontsize=15,
-                        xy=max_read, verticalalignment='top',
-                        horizontalalignment='left')
+                        xy=max_read, verticalalignment='bottom',
+                        horizontalalignment='center')
 
     # Color the read time ticks greed
     for t in r_plot.get_yticklabels():
