@@ -14,9 +14,9 @@ times on the data, we got the following results:
 
 ![First run][] ![Second run][] ![Third run][]
 
-  [First run]: plot.1.png "First run"
-  [Second run]: plot.2.png "Second run"
-  [Third run]: plot.3.png "Third run"
+  [First run]: plot-1.png "First run"
+  [Second run]: plot-2.png "Second run"
+  [Third run]: plot-3.png "Third run"
 
 Comparison to PL1
 -----------------
