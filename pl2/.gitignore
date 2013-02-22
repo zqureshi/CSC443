@@ -12,3 +12,4 @@ write_fixed_len_pages
 read_fixed_len_pages
 nbproject
 *.test.heap
+heapfile2csv

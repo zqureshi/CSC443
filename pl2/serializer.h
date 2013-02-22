@@ -9,13 +9,11 @@ typedef const char * V;
 /**
  * Schema of a tuple with all attributes of same length.
  */
-class Schema {
-    public:
-        int numAttrs;
-        int attrLen;
-        int hdrSize;
-
-        Schema(int numAttrs, int attrLen);
+struct Schema {
+    int numAttrs;
+    int attrLen;
+    int hdrSize;
+    Schema(int numAttrs, int attrLen);
 } extern csvSchema;
 
 /**
