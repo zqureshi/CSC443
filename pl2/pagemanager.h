@@ -30,16 +30,16 @@ int fixed_len_page_freeslots(Page *page);
  *   record slot offset if successful,
  *   -1 if unsuccessful (page full)
  */
-int add_fixed_len_page(Page *page, Record *r, Schema schema = csvSchema);
+int add_fixed_len_page(Page *page, Record *r, const Schema& schema = csvSchema);
 
 /**
  * Write a record into a given slot.
  */
-void write_fixed_len_page(Page *page, int slot, Record *r, Schema schema = csvSchema);
+void write_fixed_len_page(Page *page, int slot, Record *r, const Schema& schema = csvSchema);
 
 /**
  * Read a record from the page from a given slot.
  */
-bool read_fixed_len_page(Page *page, int slot, Record *r, Schema schema = csvSchema);
+bool read_fixed_len_page(Page *page, int slot, Record *r, const Schema& schema = csvSchema);
 
 #endif

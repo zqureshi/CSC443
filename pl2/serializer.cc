@@ -18,7 +18,7 @@ Schema::Schema(int numAttrs, int attrLen) {
 /**
  * Allocate a Record
  */
-Record::Record(Schema schema) : std::vector<V>(schema.numAttrs) {
+Record::Record(const Schema& schema) : std::vector<V>(schema.numAttrs) {
     char *block = new char[schema.numAttrs * schema.attrLen];
     memset(block, 0, schema.numAttrs * schema.attrLen);
 
@@ -37,14 +37,14 @@ Record::~Record() {
 /**
  * Inline implementation of fixed_len_sizeof()
  */
-inline int _fixed_len_sizeof(Record *record, Schema schema) {
+inline int _fixed_len_sizeof(Record *record, const Schema& schema) {
     return schema.numAttrs * schema.attrLen;
 }
 
 /**
  * Compute the number of bytes required to serialize record
  */
-int fixed_len_sizeof(Record *record, Schema schema) {
+int fixed_len_sizeof(Record *record, const Schema& schema) {
     return _fixed_len_sizeof(record, schema);
 }
 
@@ -54,7 +54,7 @@ int fixed_len_sizeof(Record *record, Schema schema) {
  * Precondition: The *buf is already allocated with enough space to store
  * number of bytes returned by fixed_len_sizeof()
  */
-void fixed_len_write(Record *record, void *buf, Schema schema) {
+void fixed_len_write(Record *record, void *buf, const Schema& schema) {
     for(Record::iterator i = record->begin(); i != record->end(); i++) {
         memcpy(buf, *i, schema.attrLen);
         buf = (char *) buf + schema.attrLen;
@@ -65,7 +65,7 @@ void fixed_len_write(Record *record, void *buf, Schema schema) {
  * Deserializes from `size` bytes from the buffer, `buf`, and
  * stores the record in `record`.
  */
-void fixed_len_read(void *buf, int size, Record *record, Schema schema) {
+void fixed_len_read(void *buf, int size, Record *record, const Schema& schema) {
     assert(size == _fixed_len_sizeof(record, schema));
     for(int i = 0; i < schema.numAttrs; i++) {
         memcpy((char *) record->at(i), (char *) buf + schema.attrLen * i, schema.attrLen);
@@ -75,7 +75,7 @@ void fixed_len_read(void *buf, int size, Record *record, Schema schema) {
 /**
  * Compute the number of bytes required to serialize record
  */
-int var_len_sizeof(Record *record, Schema schema) {
+int var_len_sizeof(Record *record, const Schema& schema) {
     /* Fixed header overhead */
     int length = schema.hdrSize;
     for(int i = 0; i < schema.numAttrs; i++) {
@@ -87,7 +87,7 @@ int var_len_sizeof(Record *record, Schema schema) {
 /**
  *  the record using variable record encoding
  */
-void var_len_write(Record *record, void *buf, Schema schema) {
+void var_len_write(Record *record, void *buf, const Schema& schema) {
     int *header = (int *) buf;
     char *data = (char *) header + schema.hdrSize;
     for(int i = 0; i < schema.numAttrs; i++) {
@@ -102,7 +102,7 @@ void var_len_write(Record *record, void *buf, Schema schema) {
 /**
  * Deserialize the `buf` which contains the variable record encoding.
  */
-void var_len_read(void *buf, int size, Record *record, Schema schema) {
+void var_len_read(void *buf, int size, Record *record, const Schema& schema) {
     int *header = (int *) buf;
     for(int i = 0; i < schema.numAttrs; i++) {
         memcpy((char *) record->at(i), (char *) buf + header[i], header[i+1] - header[i]);

@@ -22,7 +22,7 @@ inline PageID _get_new_id() {
     return id++;
 }
 
-Page *_init_page(Heapfile *heapfile, Schema schema = heapSchema) {
+Page *_init_page(Heapfile *heapfile, const Schema& schema = heapSchema) {
     Page *page = new Page;
     init_fixed_len_page(page, heapfile->page_size, schema.numAttrs * schema.attrLen);
     return page;

@@ -1,5 +1,5 @@
 CC = g++
-CCFLAGS = -Wall -g -pedantic
+CCFLAGS = -Wall -g # -pedantic
 OBJS = serializer.o pagemanager.o heapmanager.o library.o
 
 INCLUDES_TEST = -I./
