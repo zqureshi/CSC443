@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 
 #include "library.h"
@@ -35,7 +36,13 @@ int main(int argc, char **argv)
     RecordIterator recordIter(&heap);
     while (recordIter.hasNext()) {
         Record record = recordIter.next();
-        printrecord(&record);
+        const char *a1 = record.at(0);
+        const char *a2 = record.at(1);
+
+        // TODO
+        // For each SUBSTRING(a2, 1, 5), get number of records that match that
+        // substring.
+
         record_count++;
     }
 
