@@ -2,11 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include <sys/timeb.h>
 #include <sstream>
 #include <fstream>
 #include <string>
 
+#include "library.h"
 #include "serializer.h"
 #include "pagemanager.h"
 
@@ -17,15 +17,6 @@
 // Buffer needs to have enough space for the columns, the 9 commas, the
 // newline, and a \0.
 #define BUFFER_SIZE (RECORD_SIZE + COLUMN_COUNT + 1)
-
-/**
- * Returns the current system time in milliseconds.
- */
-inline long now() {
-    struct timeb t;
-    ftime(&t);
-    return t.time * 1000 + t.millitm;
-}
 
 int main(int argc, char **argv) {
     if (argc != 4) {

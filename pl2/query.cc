@@ -10,19 +10,19 @@
 
 int main(int argc, char **argv)
 {
-    if (argc < 3) {
-        printf("USAGE: %s <heap file> <csv file> [page size]\n", argv[0]);
+    if (argc < 4) {
+        printf("USAGE: %s <heap file> <start> <end> [page size]\n", argv[0]);
         exit(1);
     }
 
     char *heapfile = *(argv++),
-         *csvfile  = *(argv++);
-    int page_size  = argc > 3 ? atoi(*argv) : 16384; // Default to 16K
+         *start    = *(argv++),
+         *end      = *(argv++);
+    int page_size  = argc > 4 ? atoi(*argv) : 16384; // Default to 16K
 
-    FILE *heapf = fopen(heapfile, "r"),
-         *csvf  = fopen( csvfile, "w");
-    if (!csvf || !heapf) {
-        printf("Error opening file(s).\n");
+    FILE *heapf = fopen(heapfile, "r");
+    if (!heapf) {
+        printf("Error opening file.\n");
         exit(1);
     }
 
@@ -44,6 +44,5 @@ int main(int argc, char **argv)
     printf("TIME: %ld milliseconds\n", end_time - start_time);
 
     fclose(heapf);
-    fclose(csvf);
     return 0;
 }

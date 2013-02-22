@@ -1,25 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
-#include <sys/timeb.h>
 #include <fstream>
 #include <sstream>
 #include <string>
 
+#include "library.h"
 #include "pagemanager.h"
 #include "heapmanager.h"
 
 #define RECORD_SIZE 1000
-
-/**
- * Returns the current system time in milliseconds.
- */
-inline long now() {
-    struct timeb t;
-    ftime(&t);
-    return t.time * 1000 + t.millitm;
-}
-
 
 int main(int argc, char **argv) {
     if (argc < 3) {

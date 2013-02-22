@@ -1,34 +1,43 @@
 CC = g++
-CCFLAGS = -Wall -g
-OBJS = serializer.o pagemanager.o heapmanager.o
+CCFLAGS = -Wall -g -pedantic
+OBJS = serializer.o pagemanager.o heapmanager.o library.o
 
 INCLUDES_TEST = -I./
 LIBS_TEST = -pthread -lgtest -L.
-TARGETS = write_fixed_len_pages read_fixed_len_pages csv2heapfile heapfile2csv
+TARGETS = write_fixed_len_pages read_fixed_len_pages \
+		  # csv2heapfile heapfile2csv query
+# ^ Uncomment when heapmanager is done
+
 TARGETS_TEST = test_serializer test_pagemanager test_heapmanager
+
+PAGEDEPS = serializer.o pagemanager.o library.o
+HEAPDEPS = $(PAGEDEPS) heapmanager.o
 
 ## Project Build
 .PHONY: all clean
 
 all: $(TARGETS) $(OBJS)
 
-read_fixed_len_pages: read_fixed_len_pages.o serializer.o pagemanager.o
+read_fixed_len_pages: read_fixed_len_pages.o $(PAGEDEPS)
 	$(CC) -o $@ $(CCFLAGS) $^
 
-write_fixed_len_pages: write_fixed_len_pages.o serializer.o pagemanager.o
+write_fixed_len_pages: write_fixed_len_pages.o $(PAGEDEPS)
 	$(CC) -o $@ $(CCFLAGS) $^
 
-csv2heapfile: csv2heapfile.o serializer.o pagemanager.o heapmanager.o
+csv2heapfile: csv2heapfile.o $(HEAPDEPS)
 	$(CC) -o $@ $(CCFLAGS) $^
 
-heapfile2csv: heapfile2csv.o serializer.o pagemanager.o heapmanager.o
+heapfile2csv: heapfile2csv.o $(HEAPDEPS)
+	$(CC) -o $@ $(CCFLAGS) $^
+
+query: query.o $(HEAPDEPS)
 	$(CC) -o $@ $(CCFLAGS) $^
 
 %.o: %.cc
 	$(CC) -c -o $@ $(CCFLAGS) $^
 
 clean: clean-test
-	rm -rf $(OBJS) $(TARGETS) $(TARGETS:%=%.o)
+	rm -rf $(OBJS) $(TARGETS) *.o
 
 ## Testing Framework
 .PHONY: test run-test clean-test

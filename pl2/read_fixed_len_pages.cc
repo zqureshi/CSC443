@@ -1,33 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <assert.h>
-#include <sys/timeb.h>
 
+#include "library.h"
 #include "serializer.h"
 #include "pagemanager.h"
 
 // Number of bytes taken by a record.
 #define RECORD_SIZE 1000
-
-/**
- * Returns the current system time in milliseconds.
- */
-inline long now() {
-    struct timeb t;
-    ftime(&t);
-    return t.time * 1000 + t.millitm;
-}
-
-inline void print_record(Record *r) {
-    bool first = true;
-    for (Record::iterator it = r->begin(); it != r->end(); it++)
-        if (first) {
-            printf("%s", *it);
-            first = false;
-        } else
-            printf(",%s", *it);
-    printf("\n");
-}
 
 int main(int argc, char **argv) {
     if (argc != 3) {
@@ -62,7 +41,7 @@ int main(int argc, char **argv) {
         Record r;
         for (int i = 0; i < capacity; ++i) {
             if (read_fixed_len_page(&page, i, &r)) {
-                print_record(&r);
+                printrecord(&r);
                 record_count++;
             }
         }
