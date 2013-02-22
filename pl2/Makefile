@@ -4,7 +4,7 @@ OBJS = serializer.o pagemanager.o heapmanager.o
 
 INCLUDES_TEST = -I./
 LIBS_TEST = -pthread -lgtest -L.
-TARGETS = write_fixed_len_pages read_fixed_len_pages csv2heapfile
+TARGETS = write_fixed_len_pages read_fixed_len_pages csv2heapfile heapfile2csv
 TARGETS_TEST = test_serializer test_pagemanager test_heapmanager
 
 ## Project Build
@@ -19,6 +19,9 @@ write_fixed_len_pages: write_fixed_len_pages.o serializer.o pagemanager.o
 	$(CC) -o $@ $(CCFLAGS) $^
 
 csv2heapfile: csv2heapfile.o serializer.o pagemanager.o heapmanager.o
+	$(CC) -o $@ $(CCFLAGS) $^
+
+heapfile2csv: heapfile2csv.o serializer.o pagemanager.o heapmanager.o
 	$(CC) -o $@ $(CCFLAGS) $^
 
 %.o: %.cc
