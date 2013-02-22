@@ -1,3 +1,4 @@
+#include <cstdio>
 #include "library.h"
 #include "serializer.h"
 
