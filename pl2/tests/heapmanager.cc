@@ -163,6 +163,9 @@ TEST(HeapManager, RWPageMany) {
             for(int i = 0; i < csvSchema.numAttrs; i++)
                 ASSERT_STREQ(record.at(i), readRecord.at(i));
         }
+
+        delete [] (char*) page.data;
+        delete [] (char*) readPage.data;
     }
 
     ASSERT_EQ(-1, alloc_page(&heap));
