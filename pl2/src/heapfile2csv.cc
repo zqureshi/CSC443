@@ -7,6 +7,7 @@
 #include "heapmanager.h"
 
 #define RECORD_SIZE 1000
+extern Schema csvSchema;
 
 int main(int argc, char **argv)
 {
@@ -15,9 +16,9 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    char *heapfile = *(argv++),
-         *csvfile  = *(argv++);
-    int page_size  = argc > 3 ? atoi(*argv) : 16384; // Default to 16K
+    char *heapfile = argv[1],
+         *csvfile  = argv[2];
+    int page_size  = argc > 3 ? atoi(argv[3]) : 16384; // Default to 16K
 
     FILE *heapf = fopen(heapfile, "r"),
          *csvf  = fopen( csvfile, "w");
@@ -30,9 +31,9 @@ int main(int argc, char **argv)
     long start_time = now();
 
     Heapfile heap;
-    init_heapfile(&heap, page_size, heapf);
+    init_heapfile(&heap, page_size, heapf, false);
 
-    RecordIterator recordIter(&heap);
+    RecordIterator recordIter(&heap, csvSchema);
     while (recordIter.hasNext()) {
         Record record = recordIter.next();
         printrecord(&record);

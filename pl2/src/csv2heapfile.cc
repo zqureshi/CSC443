@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
     int page_size  = argc > 3 ? atoi(argv[3]) : 16384;  // Default to 16K
 
     std::ifstream csvf(csvfile);
-    FILE *heapf = fopen(heapfile, "w");
+    FILE *heapf = fopen(heapfile, "w+");
     if (!csvf || !heapf) {
         printf("Error opening file(s).\n");
         exit(1);

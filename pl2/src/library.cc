@@ -7,9 +7,9 @@ void printrecord(Record *record) {
     for (Record::iterator it = record->begin(); it != record->end(); it++)
         if (first) {
             first = false;
-            printf("%s\n", *it);
+            printf("%s", *it);
         } else
-            printf(",%s\n", *it);
+            printf(",%s", *it);
     printf("\n");
 }
 
