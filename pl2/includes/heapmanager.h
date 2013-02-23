@@ -16,6 +16,8 @@ typedef struct {
     int slot;
 } RecordID;
 
+extern Schema heapSchema;
+
 /**
  * Initalize a heapfile to use the file and page size given.
  */
@@ -53,6 +55,25 @@ class PageIterator {
         int capacity_;
 };
 
+/**
+ * Iterates through all the directories in a heap.
+ */
+class HeapDirectoryIterator {
+    public:
+        HeapDirectoryIterator(Heapfile *heap);
+        ~HeapDirectoryIterator();
+        bool hasNext();
+        Page *next();
+    private:
+        // The heap whose directories are being iterated.
+        Heapfile *heap_;
+
+        // Last read directory page.
+        Page *directory_;
+
+        // Offset of the next page to be read, or -1 if end reached.
+        int dir_offset_;
+};
 
 class RecordIterator {
     public:

@@ -356,6 +356,46 @@ Record PageIterator::next() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// Heap Directory Iterator
+
+HeapDirectoryIterator::HeapDirectoryIterator(Heapfile *heap) {
+    heap_       = heap;
+    directory_  = _init_page(heap, heapSchema);
+    dir_offset_ = DIR_OFFSET;
+}
+
+HeapDirectoryIterator::~HeapDirectoryIterator() {
+    _free_page(directory_);
+}
+
+Page *HeapDirectoryIterator::next() {
+    // Read the page
+    fseek(heap_->file_ptr, dir_offset_, SEEK_SET);
+    fread(directory_->data, heap_->page_size, 1, heap_->file_ptr);
+
+    // Read the directory header and assert consistency.
+    Record headerRecord(heapSchema);
+    assert(read_fixed_len_page(directory_, 0, &headerRecord, heapSchema));
+    DirHdr *dirHeader = (DirHdr *) headerRecord.at(0);
+    assert(dirHeader->offset == dir_offset_);
+    assert(dirHeader->sig == DIRHDR_SIG);
+
+    // Update the next directory offset. If the next offset is 0, change it to
+    // -1 to mark completion. We need this because the initial directory has
+    // offset 0.
+    dir_offset_ = dirHeader->next;
+    if (dir_offset_ == DIRHDR_NULL) {
+        dir_offset_ = -1;
+    }
+
+    return directory_;
+}
+
+bool HeapDirectoryIterator::hasNext() {
+    return dir_offset_ != -1;
+};
+
+////////////////////////////////////////////////////////////////////////////////
 // Record Iterator
 
 RecordIterator::RecordIterator(Heapfile *heap, const Schema &schema)
