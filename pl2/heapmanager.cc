@@ -18,6 +18,12 @@ typedef struct {
 Schema heapSchema(3, 4);
 
 inline PageID _get_new_id() {
+    /**
+     *  TODO: Make this global or store in heapfile. When reading new
+     *  heapfile then traverse whole file and figure out the largest
+     *  PageID and allocate subsequent ones from there.
+     *
+     */
     static PageID id = 0;
     return id++;
 }
@@ -46,28 +52,45 @@ int _locate_pageId(Heapfile *heapfile, PageID pageId, Page **dirPage, int *dirSl
     FILE *file = heapfile->file_ptr;
     int page_size = heapfile->page_size;
 
-    /* Read primary directory page */
     Page *directory = _init_page(heapfile);
-    fseek(file, DIR_OFFSET, SEEK_SET);
-    fread(directory->data, page_size, 1, file);
+    Record hdrRecord(heapSchema);
+    DirHdr *dirHdr;
 
-    /**
-     * Locate the PageID in directory and return offset. The first
-     * record of a directory page is always a DirHdr so skip it.
-     */
     int offset = -1, slot;
-    for(slot = 1; slot < fixed_len_page_capacity(directory); slot++) {
-        Record dirRecord(heapSchema);
 
-        /* If slot is non-empty then check it */
-        if(read_fixed_len_page(directory, slot, &dirRecord, heapSchema)) {
-            DirRecord *pageRecord = (DirRecord *) dirRecord.at(0);
-            if(pageRecord->pageId == pageId) {
-                offset = pageRecord->offset;
-                break;
+    int directory_offset, next = DIR_OFFSET;
+    do {
+        directory_offset = next;
+        fseek(file, directory_offset, SEEK_SET);
+        fread(directory->data, page_size, 1, file);
+
+        /**
+         * Locate the PageID in directory and return offset. The first
+         * record of a directory page is always a DirHdr so skip it.
+         */
+        for(slot = 1; slot < fixed_len_page_capacity(directory); slot++) {
+            Record dirRecord(heapSchema);
+
+            /* If slot is non-empty then check it */
+            if(read_fixed_len_page(directory, slot, &dirRecord, heapSchema)) {
+                DirRecord *pageRecord = (DirRecord *) dirRecord.at(0);
+                if(pageRecord->pageId == pageId) {
+                    offset = pageRecord->offset;
+                    break;
+                }
             }
         }
-    }
+
+        /* Fetch the next pointer */
+        assert(true == read_fixed_len_page(directory, 0, &hdrRecord, heapSchema));
+
+        dirHdr = (DirHdr *) (hdrRecord.at(0));
+        assert(dirHdr->offset == directory_offset);
+        assert(dirHdr->sig == DIRHDR_SIG);
+
+        /* Set next pointer */
+        next = dirHdr->next;
+    } while(next != DIRHDR_NULL);
 
     if(offset == -1) {
         /* Free directory page */
@@ -84,6 +107,21 @@ int _locate_pageId(Heapfile *heapfile, PageID pageId, Page **dirPage, int *dirSl
 }
 
 /**
+ * Initialize a new directory page with proper values.
+ */
+void _init_dir_page(Page *directory, int offset) {
+    /* First directory entry of a heap page is a pointer to next or NULL */
+    Record hdrRecord(heapSchema);
+    DirHdr *dirHdr = (DirHdr *) (hdrRecord.at(0));
+    dirHdr->offset = offset;
+    dirHdr->next = DIRHDR_NULL;
+    dirHdr->sig  = DIRHDR_SIG;
+
+    /* Populate directory header and make sure it's at the first slot */
+    assert(0 == add_fixed_len_page(directory, &hdrRecord, heapSchema));
+}
+
+/**
  * Initalize a heapfile to use the file and page size given.
  */
 void init_heapfile(Heapfile *heapfile, int page_size, FILE *file, bool newHeap) {
@@ -96,15 +134,7 @@ void init_heapfile(Heapfile *heapfile, int page_size, FILE *file, bool newHeap) 
 
     /* If creating new heap then write primary directory page */
     if(newHeap) {
-        /* First directory entry of a heap page is a pointer to next or NULL */
-        Record hdrRecord(heapSchema);
-        DirHdr *dirHdr = (DirHdr *) (hdrRecord.at(0));
-        dirHdr->offset = DIR_OFFSET;
-        dirHdr->next = DIRHDR_NULL;
-        dirHdr->sig  = DIRHDR_SIG;
-
-        /* Populate directory header and make sure it's at the first slot */
-        assert(0 == add_fixed_len_page(directory, &hdrRecord, heapSchema));
+        _init_dir_page(directory, DIR_OFFSET);
 
         /* Write page to disk */
         fseek(file, DIR_OFFSET, SEEK_SET);
@@ -151,26 +181,71 @@ PageID alloc_page(Heapfile *heapfile, const Schema& schema) {
     pageRecord->offset = offset;
     pageRecord->slots = fixed_len_page_freeslots(page);
 
-    /* Load primary directory and add page record */
-    Page *directory = _init_page(heapfile);
-    fseek(file, DIR_OFFSET, SEEK_SET);
-    fread(directory->data, page_size, 1, file);
-
-    if((slot = add_fixed_len_page(directory, &dirRecord, heapSchema)) == -1) {
-        /* Free pages */
-        _free_page(page);
-        _free_page(directory);
-
-        return -1;
-    }
-
-    /* Write directory to disk */
-    fseek(file, DIR_OFFSET, SEEK_SET);
-    fwrite(directory->data, page_size, 1, file);
-
     /* Append page to file */
     fseek(file, offset, SEEK_SET);
     fwrite(page->data, page_size, 1, file);
+    fflush(file);
+
+    /**
+     * Since we don't support page deletion, a new page can only be added
+     * to the last directory page so traverse list to the last page and
+     * try to add, if it is full then we need to create a new directory
+     * page and link it.
+     */
+    Page *directory = _init_page(heapfile);
+    Record hdrRecord(heapSchema);
+    DirHdr *dirHdr;
+
+    int directory_offset, next = DIR_OFFSET;
+    do {
+        /* Load directory page */
+        directory_offset = next;
+        fseek(file, directory_offset, SEEK_SET);
+        fread(directory->data, page_size, 1, file);
+
+        assert(true == read_fixed_len_page(directory, 0, &hdrRecord, heapSchema));
+
+        dirHdr = (DirHdr *) (hdrRecord.at(0));
+        assert(dirHdr->offset == directory_offset);
+        assert(dirHdr->sig == DIRHDR_SIG);
+
+        /* Set next pointer */
+        next = dirHdr->next;
+    } while(next != DIRHDR_NULL);
+
+    /**
+     * At this point should be at the last directory page, try adding record
+     */
+    if((slot = add_fixed_len_page(directory, &dirRecord, heapSchema)) == -1) {
+        /**
+         * Last directory page was full so allocate new one and link it
+         */
+        fseek(file, 0, SEEK_END);
+        int new_directory_offset = ftell(file);
+
+        /* Update header in current directory page and write it */
+        dirHdr->next = new_directory_offset;
+        write_fixed_len_page(directory, 0, &hdrRecord, heapSchema);
+
+        fseek(file, directory_offset, SEEK_SET);
+        fwrite(directory->data, page_size, 1, file);
+        fflush(file);
+
+        /* Set current offset to new offset */
+        directory_offset = new_directory_offset;
+
+        /* Free current directory page and re-initiate it */
+        _free_page(directory);
+        directory = _init_page(heapfile, heapSchema);
+        _init_dir_page(directory, directory_offset);
+
+        /* Add page record to newly directory page, this should never fail */
+        assert((slot = add_fixed_len_page(directory, &dirRecord, heapSchema)) != -1);
+    }
+
+    /* Write directory to disk */
+    fseek(file, directory_offset, SEEK_SET);
+    fwrite(directory->data, page_size, 1, file);
     fflush(file);
 
     /* Free pages */

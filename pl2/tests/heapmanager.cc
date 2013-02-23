@@ -52,9 +52,9 @@ TEST(HeapManager, AllocPage) {
     // NOTE: This test should always be the first test to call alloc_page
     // since it depends on a static variable starting at 0.
 
-    /* Make sure we can't insert any more pages */
-    for(int i = 0; i < 315; i++)
-        ASSERT_EQ(-1, alloc_page(&heap));
+    /* Make sure we can insert more pages than can fit in one directory page */
+    for(int i = 314; i < (315 + 900); i++)
+        ASSERT_EQ(i, alloc_page(&heap));
 
     fclose(file);
 }
@@ -121,8 +121,11 @@ TEST(HeapManager, RWPageMany) {
     Heapfile heap;
     init_heapfile(&heap, PAGE_SIZE, file, true);
 
-    // Fill the heap directory.
-    for (int i = 0; i < 314; ++i) {
+    /**
+     * Fill the heap directory making sure we insert more pages than
+     * can fit in one directory page.
+     */
+    for (int i = 0; i < 900; ++i) {
         // Allocate page in heapfile
         PageID pid = alloc_page(&heap);
 
@@ -167,8 +170,6 @@ TEST(HeapManager, RWPageMany) {
         delete [] (char*) page.data;
         delete [] (char*) readPage.data;
     }
-
-    ASSERT_EQ(-1, alloc_page(&heap));
 
     fclose(file);
 }
