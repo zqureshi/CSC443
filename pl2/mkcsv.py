@@ -1,19 +1,18 @@
-import sys
 import random
+import argparse
 
-letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-try:
-    filename, n_tuples = sys.argv[1:3]
-    n = int(n_tuples)
-except:
-    print 'Usage: %s <outfile> <number of tuples>' % sys.argv[0]
-    sys.exit(0)
+LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
-with open(filename, 'w') as f:
-    for _ in xrange(n):
-        row = []
-        for a in range(100):
-            row.append(''.join([random.choice(letters) for j in range(10)]))
-        print >>f, ",".join(row)
+PARSER = argparse.ArgumentParser()
+PARSER.add_argument('--attr-len', '-a', metavar='SIZE', type=int,
+                    dest='attr')
+PARSER.add_argument('tuples', metavar='COUNT', type=int)
+PARSER.add_argument('file', metavar='FILE', type=argparse.FileType('w'))
+args = PARSER.parse_args()
 
-print "Generated %d random tuples in %s." % (n, filename)        
+for i in xrange(args.tuples):
+    row = [''.join([random.choice(LETTERS) for j in xrange(args.attr)])
+           for a in xrange(100)]
+    print >>args.file, ",".join(row)
+
+print "Generated %d random tuples in %s." % (args.tuples, args.file.name)
