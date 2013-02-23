@@ -29,12 +29,12 @@ PageID alloc_page(Heapfile *heapfile);
 /**
  * Read a page into memory
  */
-void read_page(Heapfile *heapfile, PageID pid, Page *page);
+bool read_page(Heapfile *heapfile, PageID pid, Page *page);
 
 /**
  * Write a page from memory to disk
  */
-void write_page(Page *page, Heapfile *heapfile, PageID pid);
+bool write_page(Heapfile *heapfile, PageID pid, Page *page);
 
 class RecordIterator {
     public:

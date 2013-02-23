@@ -34,6 +34,56 @@ void _free_page(Page *page) {
 }
 
 /**
+ * Locate PageID in directory and return its offset and set
+ * directory and slot pointers, else return -1.
+ *
+ * TODO: Handle traversing overflow directory pages.
+ */
+int _locate_pageId(Heapfile *heapfile, PageID pageId, Page **dirPage, int *dirSlot) {
+    assert(dirPage != NULL);
+    assert(dirSlot != NULL);
+
+    FILE *file = heapfile->file_ptr;
+    int page_size = heapfile->page_size;
+
+    /* Read primary directory page */
+    Page *directory = _init_page(heapfile);
+    fseek(file, DIR_OFFSET, SEEK_SET);
+    fread(directory->data, page_size, 1, file);
+
+    /**
+     * Locate the PageID in directory and return offset. The first
+     * record of a directory page is always a DirHdr so skip it.
+     */
+    int offset = -1, slot;
+    for(slot = 1; slot < fixed_len_page_capacity(directory); slot++) {
+        Record dirRecord(heapSchema);
+
+        /* If slot is non-empty then check it */
+        if(read_fixed_len_page(directory, slot, &dirRecord, heapSchema)) {
+            DirRecord *pageRecord = (DirRecord *) dirRecord.at(0);
+            if(pageRecord->pageId == pageId) {
+                offset = pageRecord->offset;
+                break;
+            }
+        }
+    }
+
+    if(offset == -1) {
+        /* Free directory page */
+        _free_page(directory);
+
+        return offset;
+    }
+
+    /* Set directory page and slot pointers */
+    *dirPage = directory;
+    *dirSlot = slot;
+
+    return offset;
+}
+
+/**
  * Initalize a heapfile to use the file and page size given.
  */
 void init_heapfile(Heapfile *heapfile, int page_size, FILE *file, bool newHeap) {
@@ -128,4 +178,68 @@ PageID alloc_page(Heapfile *heapfile) {
     _free_page(directory);
 
     return pageId;
+}
+
+/**
+ * Read Page with given PageID from Heapfile else return false.
+ */
+bool read_page(Heapfile *heapfile, PageID pid, Page *page) {
+    Page *directory;
+    int offset, slot;
+
+    /* If record for given PageID doesn't exist then fail */
+    if((offset = _locate_pageId(heapfile, pid, &directory, &slot)) == -1) {
+        return false;
+    }
+
+    /* Read page from disk */
+    fseek(heapfile->file_ptr, offset, SEEK_SET);
+    fread(page->data, heapfile->page_size, 1, heapfile->file_ptr);
+
+    /* Free up directory page */
+    _free_page(directory);
+
+    return true;
+}
+
+/**
+ * Write page with given PageID to HeapFile else return false.
+ */
+bool write_page(Heapfile *heapfile, PageID pid, Page *page) {
+    FILE *file = heapfile->file_ptr;
+    int page_size = heapfile->page_size;
+
+    Page *directory;
+    int offset, slot;
+
+    /* If record for given PageID doesn't exist then fail */
+    if((offset = _locate_pageId(heapfile, pid, &directory, &slot)) == -1) {
+        return false;
+    }
+
+    /* Update free slot information in page record */
+    Record dirRecord(heapSchema);
+    assert(true == read_fixed_len_page(directory, slot, &dirRecord, heapSchema));
+
+    DirRecord *pageRecord = (DirRecord *) dirRecord.at(0);
+    pageRecord->slots = fixed_len_page_freeslots(page);
+
+    write_fixed_len_page(directory, slot, &dirRecord, heapSchema);
+
+    /* Get directory offset from its header and write it to disk */
+    assert(true == read_fixed_len_page(directory, 0, &dirRecord, heapSchema));
+    DirHdr *dirHdr = (DirHdr *) dirRecord.at(0);
+
+    fseek(file, dirHdr->offset, SEEK_SET);
+    fwrite(directory->data, page_size, 1, file);
+
+    /* Write actual page to disk */
+    fseek(file, offset, SEEK_SET);
+    fwrite(page->data, page_size, 1, file);
+    fflush(file);
+
+    /* Free up directory page */
+    _free_page(directory);
+
+    return true;
 }
