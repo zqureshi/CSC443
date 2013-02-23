@@ -32,6 +32,8 @@ TEST(PageInit, PageInitialization) {
     ASSERT_EQ(page_size, p.page_size);
     ASSERT_EQ(slot_size, p.slot_size);
     ASSERT_NE((void *) NULL, p.data);
+
+    delete [] (char *) p.data;
 }
 
 TEST(PageSlots, EmptyPage) {
@@ -39,6 +41,8 @@ TEST(PageSlots, EmptyPage) {
     Page p;
     init_fixed_len_page(&p, page_size, slot_size);
     ASSERT_EQ(0, fixed_len_page_freeslots(&p)) << "Empty page should have 0 free slots!";
+
+    delete [] (char *) p.data;
 }
 
 TEST(PageSlots, NewPage) {
@@ -46,6 +50,8 @@ TEST(PageSlots, NewPage) {
     Page p;
     init_fixed_len_page(&p, page_size, slot_size);
     ASSERT_EQ(fixed_len_page_capacity(&p), fixed_len_page_freeslots(&p)) << "Newly created page should have all slots free!";
+
+    delete [] (char *) p.data;
 }
 
 TEST(PageRecords, RecordManagement) {
@@ -77,5 +83,7 @@ TEST(PageRecords, RecordManagement) {
     read_fixed_len_page(&p, slot2, &r2_read);
     for (int i = 0; i < csvSchema.numAttrs; ++i)
         ASSERT_STREQ(r2.at(i), r2_read.at(i));
+
+    delete [] (char *) p.data;
 }
 
