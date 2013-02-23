@@ -5,7 +5,7 @@
 #define CSV_NUM_ATTRS 100
 #define CSV_ATTR_LEN   10
 
+#define DIR_OFFSET   0x0
 #define DIRHDR_NULL  0x0000
-#define DIRHDR_SIG1  0xCAFED00D
-#define DIRHDR_SIG2  0xB16B00B5
+#define DIRHDR_SIG   0xCAFED00D
 #endif /* CONSTANTS_H_ */
