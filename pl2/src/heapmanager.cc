@@ -319,6 +319,45 @@ bool write_page(Heapfile *heapfile, PageID pid, Page *page) {
     return true;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Page Iterator
+
+PageIterator::PageIterator(Page *page, const Schema &schema)
+        : schema_(schema), record_(schema) {
+    slot_     = 0;
+    page_     = page;
+    capacity_ = fixed_len_page_capacity(page);
+}
+
+bool PageIterator::hasNext() {
+    // Page exhausted.
+    if (slot_ >= capacity_) {
+        return false;
+    }
+
+    // Keep going until a non-empty slot is found.
+    while (slot_ < capacity_ &&
+            !read_fixed_len_page(page_, slot_, &record_)) {
+        slot_++;
+    }
+
+    return slot_ < capacity_;
+}
+
+Record PageIterator::peek() {
+    return record_;
+}
+
+Record PageIterator::next() {
+    // We assume that hasNext has already been called.
+    assert(slot_ < capacity_);
+    slot_++;
+    return record_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Record Iterator
+
 RecordIterator::RecordIterator(Heapfile *heap, const Schema &schema)
         : schema_(schema) {
     heap_           = heap;
@@ -350,4 +389,5 @@ RecordIterator::~RecordIterator() {
     _free_page(directory_);
     _free_page(page_);
 }
+
 
