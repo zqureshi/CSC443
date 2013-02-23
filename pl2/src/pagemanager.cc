@@ -118,7 +118,7 @@ bool PageRecordIterator::hasNext() {
 
     // Find next non-empty record in the page.
     while (slot_ < capacity_ &&
-            !read_fixed_len_page(page_, slot_, &record_)) {
+            !read_fixed_len_page(page_, slot_, &record_, schema_)) {
         slot_++;
     }
 
