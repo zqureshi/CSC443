@@ -24,6 +24,7 @@ extern Schema csvSchema;
 class Record : public std::vector<V> {
     public:
         Record(const Schema& = csvSchema);
+        Record(const Record &record);
         ~Record();
 };
 

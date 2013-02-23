@@ -27,6 +27,26 @@ Record::Record(const Schema& schema) : std::vector<V>(schema.numAttrs) {
     }
 }
 
+Record::Record(const Record &record) : std::vector<V>(record.size()) {
+    int num_attrs = record.size();
+
+    // Number of attributes needs to be greater than 1 for this to work.
+    assert(num_attrs > 1);
+
+    // Determine schema attr len.
+    // (block + schema.attrLen * (i+1)) -  (block + schema.attrLen * i)
+    // = schema.attrLen (i + 1 - i)
+    // = schema.attrLen
+    int attr_len = record.at(1) - record.at(0);
+
+    char *block = new char[num_attrs * attr_len];
+    memcpy(block, record.at(0), num_attrs * attr_len);
+
+    for (int i = 0; i < num_attrs; ++i) {
+        at(i) = block + attr_len * i;
+    }
+}
+
 /**
  * Free up record and its associated pointers.
  */
