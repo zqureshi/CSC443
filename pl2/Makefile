@@ -5,7 +5,7 @@ INCLUDES = -I. -I./includes
 
 LIBS_TEST = -pthread -lgtest -L.
 TARGETS = write_fixed_len_pages read_fixed_len_pages \
-		  csv2heapfile heapfile2csv # query
+		  csv2heapfile heapfile2csv query
 
 TARGETS_TEST = test_serializer test_pagemanager test_heapmanager
 
