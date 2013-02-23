@@ -16,8 +16,6 @@ typedef struct {
     int slot;
 } RecordID;
 
-extern Schema heapSchema;
-
 /**
  * Initalize a heapfile to use the file and page size given.
  */
@@ -53,6 +51,7 @@ class PageRecordIterator {
         Page *page_;
         int slot_;
         int capacity_;
+        bool record_valid_;
 };
 
 /**
