@@ -34,14 +34,14 @@ int main(int argc, char **argv) {
     Heapfile heap;
     init_heapfile(&heap, page_size, heapf, true);
 
-    PageID pid = alloc_page(&heap);
     Page p;
-    read_page(&heap, pid, &p);
+    init_fixed_len_page(&p, page_size, RECORD_SIZE);
 
     int total_records = 0;
     int page_count = 0;
     int capacity = fixed_len_page_capacity(&p);
     int added = 0; // number of records added to the current page
+
     while (csvf) {
         Record r;
 
@@ -66,9 +66,8 @@ int main(int argc, char **argv) {
 
         if (added == capacity) {
             // Write page to file and re-initialize.
-            write_page(&heap, pid, &p);
-            pid = alloc_page(&heap);
-            read_page(&heap, pid, &p);
+            assert(write_page(&heap, alloc_page(&heap), &p));
+            init_fixed_len_page(&p, page_size, RECORD_SIZE);
             page_count++;
             total_records += added;
             added = 0;
@@ -76,7 +75,7 @@ int main(int argc, char **argv) {
     }
 
     if (added > 0) {
-        write_page(&heap, pid, &p);
+        write_page(&heap, alloc_page(&heap), &p);
         page_count++;
         total_records += added;
     }

@@ -332,6 +332,10 @@ HeapDirectoryIterator::~HeapDirectoryIterator() {
     _free_page(directory_);
 }
 
+int HeapDirectoryIterator::offset() {
+    return dir_offset_;
+}
+
 Page *HeapDirectoryIterator::next() {
     assert(hasNext());
 
@@ -443,7 +447,7 @@ CHECK_DIRECTORY:
         dir_iter_ = NULL;
     }
 
-CHECK_HEAP:
+// CHECK_HEAP:
     // Check if the heap has another directory.
     if (heap_iter_.hasNext()) {
         Page *dir = heap_iter_.next();

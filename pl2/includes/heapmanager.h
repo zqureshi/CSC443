@@ -45,6 +45,7 @@ class HeapDirectoryIterator {
         ~HeapDirectoryIterator();
         bool hasNext();
         Page *next();
+        int offset();
     private:
         // The heap whose directories are being iterated.
         Heapfile *heap_;
