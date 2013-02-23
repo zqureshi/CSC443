@@ -1,6 +1,6 @@
 % CSC443 Practical Learning 2
 % Abhinav Gupta, Zeeshan Qureshi
-% 12 Feb 2013
+% 23 Feb 2013
 
 <!-- vim:set tw=72 spell: -->
 
@@ -14,9 +14,9 @@ times on the data, we got the following results:
 
 ![First run][] ![Second run][] ![Third run][]
 
-  [First run]: plot-1.png "First run"
-  [Second run]: plot-2.png "Second run"
-  [Third run]: plot-3.png "Third run"
+  [First run]: page-layout/plot-1.png "First run"
+  [Second run]: page-layout/plot-2.png "Second run"
+  [Third run]: page-layout/plot-3.png "Third run"
 
 Comparison to PL1
 -----------------
