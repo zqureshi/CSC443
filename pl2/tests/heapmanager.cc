@@ -1,7 +1,10 @@
+#include <stdlib.h>
+#include <stdio.h>
 #include <gtest/gtest.h>
 #include "heapmanager.h"
 
 #define PAGE_SIZE 4 * 1024
+#define RECORD_SIZE (csvSchema.numAttrs * csvSchema.attrLen)
 
 /* Import internal functions from heapmanager */
 extern Page *_init_page(Heapfile *heapfile, const Schema& schema);
@@ -46,6 +49,8 @@ TEST(HeapManager, AllocPage) {
     /* Allocate pages to fill primary directory entry */
     for(int i = 0; i < 314; i++)
         ASSERT_EQ(i, alloc_page(&heap));
+    // NOTE: This test should always be the first test to call alloc_page
+    // since it depends on a static variable starting at 0.
 
     /* Make sure we can't insert any more pages */
     for(int i = 0; i < 315; i++)
@@ -75,9 +80,9 @@ TEST(HeapManager, RWPage) {
     ASSERT_TRUE(read_page(&heap, pageId, page));
 
     /* Write data to page */
-    Record *record = new Record(csvSchema);
-    populate_full_record(record);
-    int record_slot = add_fixed_len_page(page, record, csvSchema);
+    Record record(csvSchema);
+    populate_full_record(&record);
+    int record_slot = add_fixed_len_page(page, &record, csvSchema);
     ASSERT_EQ(0, record_slot);
 
     /* Store page capacity and free slots */
@@ -96,19 +101,72 @@ TEST(HeapManager, RWPage) {
     ASSERT_DOUBLE_EQ(free_slots, fixed_len_page_freeslots(readPage));
 
     /* Compare records */
-    Record *readRecord = new Record(csvSchema);
-    read_fixed_len_page(readPage, record_slot, readRecord, csvSchema);
+    Record readRecord(csvSchema);
+    read_fixed_len_page(readPage, record_slot, &readRecord, csvSchema);
 
     for(int i = 0; i < csvSchema.numAttrs; i++)
-        ASSERT_STREQ(record->at(i), readRecord->at(i));
+        ASSERT_STREQ(record.at(i), readRecord.at(i));
 
     /* Free all pages and records */
     _free_page(directory);
     _free_page(page);
     _free_page(readPage);
 
-    delete record;
-    delete readRecord;
+    fclose(file);
+}
+
+TEST(HeapManager, RWPageMany) {
+    FILE *file = tmpfile();
+
+    Heapfile heap;
+    init_heapfile(&heap, PAGE_SIZE, file, true);
+
+    // Fill the heap directory.
+    for (int i = 0; i < 314; ++i) {
+        // Allocate page in heapfile
+        PageID pid = alloc_page(&heap);
+
+        // Allocate page in memory and read from heapfile
+        Page page;
+        init_fixed_len_page(&page, heap.page_size, RECORD_SIZE);
+        ASSERT_TRUE(read_page(&heap, pid, &page));
+
+        // Fill page in-memory and write to heap file
+        int num_records = 1 + (rand() % fixed_len_page_capacity(&page));
+        int record_slots[num_records];
+
+        for (int j = 0; j < num_records; ++j) {
+            Record record(csvSchema);
+            populate_full_record(&record);
+            record_slots[j] = add_fixed_len_page(&page, &record, csvSchema);
+        }
+
+        ASSERT_TRUE(write_page(&heap, pid, &page));
+
+        // Read back page and confirm that shit is the same
+        Page readPage;
+        init_fixed_len_page(&readPage, heap.page_size, RECORD_SIZE);
+        ASSERT_TRUE(read_page(&heap, pid, &readPage));
+
+        // Confirm that the number of filled slots is the same as the number
+        // of records we added.
+        ASSERT_EQ(num_records, fixed_len_page_capacity(&page) -
+                               fixed_len_page_freeslots(&page));
+
+        for (int j = 0; j < num_records; ++j) {
+            Record record(csvSchema);
+            populate_full_record(&record);
+
+            Record readRecord(csvSchema);
+            ASSERT_TRUE(read_fixed_len_page(&page, record_slots[j], &readRecord));
+
+            for(int i = 0; i < csvSchema.numAttrs; i++)
+                ASSERT_STREQ(record.at(i), readRecord.at(i));
+        }
+    }
+
+    ASSERT_EQ(-1, alloc_page(&heap));
 
     fclose(file);
 }
+
