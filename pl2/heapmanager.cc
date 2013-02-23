@@ -132,13 +132,13 @@ void init_heapfile(Heapfile *heapfile, int page_size, FILE *file, bool newHeap) 
  *
  * TODO: Support overflows by linking directory pages.
  */
-PageID alloc_page(Heapfile *heapfile) {
+PageID alloc_page(Heapfile *heapfile, const Schema& schema) {
     FILE *file = heapfile->file_ptr;
     int page_size = heapfile->page_size;
     int slot;
 
     /* Allocate page */
-    Page *page = _init_page(heapfile, csvSchema);
+    Page *page = _init_page(heapfile, schema);
 
     /* Create directory record */
     fseek(file, 0, SEEK_END);

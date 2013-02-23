@@ -24,7 +24,7 @@ void init_heapfile(Heapfile *heapfile, int page_size, FILE *file, bool newHeap =
 /**
  * Allocate another page in the heapfile.  This grows the file by a page.
  */
-PageID alloc_page(Heapfile *heapfile);
+PageID alloc_page(Heapfile *heapfile, const Schema& schema = csvSchema);
 
 /**
  * Read a page into memory
