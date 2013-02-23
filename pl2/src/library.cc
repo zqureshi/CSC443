@@ -2,14 +2,14 @@
 #include "library.h"
 #include "serializer.h"
 
-void printrecord(Record *record) {
+void printrecord(FILE *csv, Record *record) {
     bool first;
     for (Record::iterator it = record->begin(); it != record->end(); it++)
         if (first) {
             first = false;
-            printf("%s", *it);
+            fprintf(csv, "%s", *it);
         } else
-            printf(",%s", *it);
+            fprintf(csv, ",%s", *it);
     printf("\n");
 }
 

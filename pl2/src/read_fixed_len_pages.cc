@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
         Record r;
         for (int i = 0; i < capacity; ++i) {
             if (read_fixed_len_page(&page, i, &r)) {
-                printrecord(&r);
+                printrecord(stdout, &r);
                 record_count++;
             }
         }

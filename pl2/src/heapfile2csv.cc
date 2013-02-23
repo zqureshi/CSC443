@@ -36,7 +36,7 @@ int main(int argc, char **argv)
     RecordIterator recordIter(&heap, csvSchema);
     while (recordIter.hasNext()) {
         Record record = recordIter.next();
-        printrecord(&record);
+        printrecord(csvf, &record);
         record_count++;
     }
 

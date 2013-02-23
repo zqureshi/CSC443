@@ -14,7 +14,7 @@ inline long now() {
     return t.time * 1000 + t.millitm;
 }
 
-void printrecord(Record *record);
+void printrecord(FILE *file, Record *record);
 
 #endif /* end of include guard: LIBRARY_H */
 
