@@ -1,8 +1,8 @@
 CC = g++
 CCFLAGS = -Wall -g # -pedantic
 OBJS = serializer.o pagemanager.o heapmanager.o library.o
+INCLUDES = -I. -I./includes
 
-INCLUDES_TEST = -I./
 LIBS_TEST = -pthread -lgtest -L.
 TARGETS = write_fixed_len_pages read_fixed_len_pages \
 		  # csv2heapfile heapfile2csv query
@@ -19,22 +19,22 @@ HEAPDEPS = $(PAGEDEPS) heapmanager.o
 all: $(TARGETS) $(OBJS)
 
 read_fixed_len_pages: read_fixed_len_pages.o $(PAGEDEPS)
-	$(CC) -o $@ $(CCFLAGS) $^
+	$(CC) -o $@ $(CCFLAGS) $(INCLUDES) $^
 
 write_fixed_len_pages: write_fixed_len_pages.o $(PAGEDEPS)
-	$(CC) -o $@ $(CCFLAGS) $^
+	$(CC) -o $@ $(CCFLAGS) $(INCLUDES) $^
 
 csv2heapfile: csv2heapfile.o $(HEAPDEPS)
-	$(CC) -o $@ $(CCFLAGS) $^
+	$(CC) -o $@ $(CCFLAGS) $(INCLUDES) $^
 
 heapfile2csv: heapfile2csv.o $(HEAPDEPS)
-	$(CC) -o $@ $(CCFLAGS) $^
+	$(CC) -o $@ $(CCFLAGS) $(INCLUDES) $^
 
 query: query.o $(HEAPDEPS)
-	$(CC) -o $@ $(CCFLAGS) $^
+	$(CC) -o $@ $(CCFLAGS) $(INCLUDES) $^
 
-%.o: %.cc
-	$(CC) -c -o $@ $(CCFLAGS) $^
+%.o: src/%.cc
+	$(CC) -c -o $@ $(CCFLAGS) $(INCLUDES) $^
 
 clean: clean-test
 	rm -rf $(OBJS) $(TARGETS) *.o
@@ -48,7 +48,7 @@ run-test: test
 	for test in $(TARGETS_TEST); do ./$${test} && echo; done
 
 test_%: tests/%.cc tests/runner.cc $(OBJS)
-	$(CC) -o $@ $(CCFLAGS) $(INCLUDES_TEST) $^ $(LIBS_TEST)
+	$(CC) -o $@ $(CCFLAGS) $(INCLUDES) $^ $(LIBS_TEST)
 
 clean-test:
 	rm -rf $(TARGETS_TEST) *.dSYM *.test.heap
