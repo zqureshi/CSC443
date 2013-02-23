@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <cstdlib>
 #include <gtest/gtest.h>
 #include "serializer.h"
 #include "pagemanager.h"
@@ -87,3 +88,40 @@ TEST(PageRecords, RecordManagement) {
     delete [] (char *) p.data;
 }
 
+TEST(PageRecordIterator, FillAndIterate) {
+    Schema schema(10, 10);
+    int page_size = 1024;
+
+    Page page;
+    init_fixed_len_page(&page, page_size, fixed_len_sizeof(NULL, schema));
+
+    int capacity     = fixed_len_page_capacity(&page);
+    int record_count = capacity;
+
+    // Fill the page with record_count records.
+    for (int rec_num = 0; rec_num < record_count; ++rec_num) {
+        Record record(schema);
+        for (int attr_num = 0; attr_num < schema.numAttrs; ++attr_num) {
+            sprintf((char*) record.at(attr_num), "%d-%d", rec_num, attr_num);
+        }
+
+        ASSERT_EQ(rec_num, add_fixed_len_page(&page, &record, schema));
+    }
+
+    int rec_num = 0;
+    PageRecordIterator iterator(&page, schema);
+
+    // Confirm that each record matches.
+    while (iterator.hasNext()) {
+        Record record = iterator.next();
+        for (int attr_num = 0; attr_num < schema.numAttrs; ++attr_num) {
+            char buf[10];
+            sprintf(buf, "%d-%d", rec_num, attr_num);
+            ASSERT_STREQ(buf, (char*)record.at(attr_num));
+        }
+        rec_num++;
+    }
+    ASSERT_EQ(record_count, rec_num);
+
+    delete [] (char*) page.data;
+}

@@ -132,18 +132,12 @@ Record PageRecordIterator::peek() {
 }
 
 Record PageRecordIterator::next() {
-    // If valid record exists, invalidate and return it.
-    if (record_valid_) {
-        record_valid_ = false;
-        return record_;
+    if (!record_valid_) {
+        assert(hasNext());
     }
-
-    // This will read the next non-empty record too.
-    assert(hasNext());
-
-    // Update the slot number, invalidate the record and return.
-    record_valid_ = false;
+    
     slot_++;
+    record_valid_ = false;
     return record_;
 }
 
