@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
     long start_time = now();
 
     Heapfile heap;
-    init_heapfile(&heap, page_size, heapf);
+    init_heapfile(&heap, page_size, heapf, true);
 
     PageID pid = alloc_page(&heap);
     Page p;
