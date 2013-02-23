@@ -450,35 +450,60 @@ Page *DirectoryPageIterator::next() {
 // Record Iterator
 
 RecordIterator::RecordIterator(Heapfile *heap, const Schema &schema)
-        : schema_(schema) {
-    heap_           = heap;
-    page_           = _init_page(heap, schema_);
-    directory_      = _init_page(heap, heapSchema);
-    page_iter_      = 0;
-    directory_iter_ = 0;
+        : schema_(schema), heap_iter_(heap) {
+    heap_      = heap;
+    dir_iter_  = NULL;
+    page_iter_ = NULL;
+}
 
-    // Read the first directory.
-    fseek(heap_->file_ptr, DIR_OFFSET, SEEK_SET);
-    fread(directory_->data, heap_->page_size, 1, heap_->file_ptr);
+RecordIterator::~RecordIterator() {
+    if (dir_iter_)
+        delete dir_iter_;
+    if (page_iter_)
+        delete page_iter_;
 }
 
 Record RecordIterator::next() {
-    // Can assume that next page exists
-    if (!page_iter_->hasNext()) {
-        // TODO Load next page
-    }
-
+    assert(hasNext());
     return page_iter_->next();
 }
 
 bool RecordIterator::hasNext() {
-    // TODO
+CHECK_PAGE:
+    // Check if the current page has a record.
+    if (page_iter_) {
+        if (page_iter_->hasNext()) {
+            return true;
+        }
+
+        // Current page has been exhausted. Clean up.
+        delete page_iter_;
+        page_iter_ = NULL;
+    }
+
+CHECK_DIRECTORY:
+    // Check if the current directory has a page.
+    if (dir_iter_) {
+        if (dir_iter_->hasNext()) {
+            Page *page = dir_iter_->next();
+            page_iter_ = new PageRecordIterator(page, schema_);
+            goto CHECK_PAGE;
+        }
+
+        // Current directory has been exhausted. Clean up.
+        delete dir_iter_;
+        dir_iter_ = NULL;
+    }
+
+CHECK_HEAP:
+    // Check if the heap has another directory.
+    if (heap_iter_.hasNext()) {
+        Page *dir = heap_iter_.next();
+        dir_iter_ = new DirectoryPageIterator(heap_, dir, schema_);
+        goto CHECK_DIRECTORY;
+    }
+
+    // Fully exhausted. No more records.
     return false;
 }
-
-RecordIterator::~RecordIterator() {
-    _free_page(directory_);
-    _free_page(page_);
-}
-
 

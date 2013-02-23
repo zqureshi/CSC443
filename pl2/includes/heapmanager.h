@@ -106,17 +106,11 @@ class RecordIterator {
         const Schema &schema_;
         Heapfile *heap_;
 
-        // Current directory
-        Page *directory_;
-
-        // Current page
-        Page *page_;
-
-        // Used to iterate through records of the current directory.
-        PageRecordIterator *directory_iter_;
-
-        // Used to iterate through records of the current page.
-        PageRecordIterator *page_iter_;
+        // The combination of the following three iterators is used to check
+        // all records of all pages of all directories in the heap.
+        HeapDirectoryIterator   heap_iter_;
+        DirectoryPageIterator *  dir_iter_;
+        PageRecordIterator    * page_iter_;
 };
 
 #endif /* HEAPMANAGER_H_ */
