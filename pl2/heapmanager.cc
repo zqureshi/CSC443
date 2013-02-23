@@ -106,8 +106,13 @@ PageID alloc_page(Heapfile *heapfile) {
     fseek(file, DIR_OFFSET, SEEK_SET);
     fread(directory->data, page_size, 1, file);
 
-    if((slot = add_fixed_len_page(directory, &dirRecord, heapSchema)) == -1)
+    if((slot = add_fixed_len_page(directory, &dirRecord, heapSchema)) == -1) {
+        /* Free pages */
+        _free_page(page);
+        _free_page(directory);
+
         return -1;
+    }
 
     /* Write directory to disk */
     fseek(file, DIR_OFFSET, SEEK_SET);
