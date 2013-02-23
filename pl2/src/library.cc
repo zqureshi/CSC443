@@ -9,7 +9,7 @@ void printrecord(FILE *csv, Record *record) {
         fprintf(csv, (first ? "%s" : ",%s"), attr);
         first = false;
     }
-    printf("\n");
+    fprintf(csv, "\n");
 }
 
 
