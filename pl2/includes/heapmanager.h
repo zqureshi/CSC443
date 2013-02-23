@@ -37,24 +37,6 @@ bool read_page(Heapfile *heapfile, PageID pid, Page *page);
 bool write_page(Heapfile *heapfile, PageID pid, Page *page);
 
 /**
- * Iterates through all the records of a page.
- */
-class PageRecordIterator {
-    public:
-        PageRecordIterator(Page *page, const Schema &schema = csvSchema);
-        bool hasNext();
-        Record peek();
-        Record next();
-    private:
-        const Schema &schema_;
-        Record record_;
-        Page *page_;
-        int slot_;
-        int capacity_;
-        bool record_valid_;
-};
-
-/**
  * Iterates through all the directories in a heap.
  */
 class HeapDirectoryIterator {

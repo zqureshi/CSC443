@@ -42,4 +42,22 @@ void write_fixed_len_page(Page *page, int slot, Record *r, const Schema& schema 
  */
 bool read_fixed_len_page(Page *page, int slot, Record *r, const Schema& schema = csvSchema);
 
+/**
+ * Iterates through all the records of a page.
+ */
+class PageRecordIterator {
+    public:
+        PageRecordIterator(Page *page, const Schema &schema = csvSchema);
+        bool hasNext();
+        Record peek();
+        Record next();
+    private:
+        const Schema &schema_;
+        Record record_;
+        Page *page_;
+        int slot_;
+        int capacity_;
+        bool record_valid_;
+};
+
 #endif

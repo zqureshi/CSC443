@@ -320,58 +320,6 @@ bool write_page(Heapfile *heapfile, PageID pid, Page *page) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Page Iterator
-
-PageRecordIterator::PageRecordIterator(Page *page, const Schema &schema)
-        : schema_(schema), record_(schema) {
-    slot_         = 0;
-    page_         = page;
-    capacity_     = fixed_len_page_capacity(page);
-    record_valid_ = false;
-}
-
-bool PageRecordIterator::hasNext() {
-    if (record_valid_) {
-        return true;
-    }
-
-    // If page was exhausted, we're done.
-    if (slot_ >= capacity_) {
-        return (record_valid_ = false);
-    }
-
-    // Find next non-empty record in the page.
-    while (slot_ < capacity_ &&
-            !read_fixed_len_page(page_, slot_, &record_)) {
-        slot_++;
-    }
-
-    // If record found, mark as valid.
-    return (record_valid_ = (slot_ < capacity_));
-}
-
-Record PageRecordIterator::peek() {
-    assert(record_valid_);
-    return record_;
-}
-
-Record PageRecordIterator::next() {
-    // If valid record exists, invalidate and return it.
-    if (record_valid_) {
-        record_valid_ = false;
-        return record_;
-    }
-
-    // This will read the next non-empty record too.
-    assert(hasNext());
-
-    // Update the slot number, invalidate the record and return.
-    record_valid_ = false;
-    slot_++;
-    return record_;
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // Heap Directory Iterator
 
 HeapDirectoryIterator::HeapDirectoryIterator(Heapfile *heap) {
