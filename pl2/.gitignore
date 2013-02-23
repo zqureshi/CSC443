@@ -18,3 +18,5 @@ csv2heapfile
 heapfile2csv
 query
 test_*.dSYM
+heap.bin
+csv.out.txt
