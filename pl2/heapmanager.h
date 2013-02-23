@@ -36,11 +36,70 @@ bool read_page(Heapfile *heapfile, PageID pid, Page *page);
  */
 bool write_page(Heapfile *heapfile, PageID pid, Page *page);
 
+class PageIterator {
+    public:
+        PageIterator(Page *page, const Schema &schema = csvSchema)
+                : schema_(schema), record_(schema) {
+            page_ = page;
+            slot_ = 0;
+            capacity_ = fixed_len_page_capacity(page);
+        }
+
+        bool hasNext() {
+            if (slot_ >= capacity_) {
+                return false; // Page exhausted
+            }
+
+            // Keep going until a non-empty slot is found.
+            while (slot_ < capacity_ &&
+                    !read_fixed_len_page(page_, slot_, &record_)) {
+                slot_++;
+            }
+
+            return slot_ < capacity_;
+        }
+
+        Record peek() {
+            return record_;
+        }
+
+        Record next() {
+            // We assume that hasNext has already been called.
+            assert(slot_ < capacity_);
+            slot_++;
+            return record_;
+        }
+    private:
+        const Schema &schema_;
+        Record record_;
+
+        Page *page_;
+        int slot_;
+        int capacity_;
+};
+
+
 class RecordIterator {
     public:
-    RecordIterator(Heapfile *heapfile);
-    Record next();
-    bool hasNext();
+        RecordIterator(Heapfile *heap, const Schema &schema = csvSchema);
+        ~RecordIterator();
+        Record next();
+        bool hasNext();
+    private:
+        const Schema &schema_;
+        Heapfile *heap_;
+
+        // Current directory
+        Page *directory_;
+
+        // Current page
+        Page *page_;
+
+        // Used to iterate through records of the current directory.
+        PageIterator *directory_iter_;
+
+        // Used to iterate through records of the current page.
+        PageIterator *page_iter_;
 };
 
 #endif /* HEAPMANAGER_H_ */

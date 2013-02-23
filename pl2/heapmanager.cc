@@ -318,3 +318,36 @@ bool write_page(Heapfile *heapfile, PageID pid, Page *page) {
 
     return true;
 }
+
+RecordIterator::RecordIterator(Heapfile *heap, const Schema &schema)
+        : schema_(schema) {
+    heap_           = heap;
+    page_           = _init_page(heap, schema_);
+    directory_      = _init_page(heap, heapSchema);
+    page_iter_      = 0;
+    directory_iter_ = 0;
+
+    // Read the first directory.
+    fseek(heap_->file_ptr, DIR_OFFSET, SEEK_SET);
+    fread(directory_->data, heap_->page_size, 1, heap_->file_ptr);
+}
+
+Record RecordIterator::next() {
+    // Can assume that next page exists
+    if (!page_iter_->hasNext()) {
+        // TODO Load next page
+    }
+
+    return page_iter_->next();
+}
+
+bool RecordIterator::hasNext() {
+    // TODO
+    return false;
+}
+
+RecordIterator::~RecordIterator() {
+    _free_page(directory_);
+    _free_page(page_);
+}
+
