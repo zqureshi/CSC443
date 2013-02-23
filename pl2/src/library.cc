@@ -3,13 +3,12 @@
 #include "serializer.h"
 
 void printrecord(FILE *csv, Record *record) {
-    bool first;
-    for (Record::iterator it = record->begin(); it != record->end(); it++)
-        if (first) {
-            first = false;
-            fprintf(csv, "%s", *it);
-        } else
-            fprintf(csv, ",%s", *it);
+    bool first = true;
+    for (Record::iterator it = record->begin(); it != record->end(); it++) {
+        const char *attr = *it;
+        fprintf(csv, (first ? "%s" : ",%s"), attr);
+        first = false;
+    }
     printf("\n");
 }
 

@@ -21,7 +21,7 @@ int main(int argc, char **argv)
     int page_size  = argc > 3 ? atoi(argv[3]) : 16384; // Default to 16K
 
     FILE *heapf = fopen(heapfile, "r"),
-         *csvf  = fopen( csvfile, "w");
+         *csvf  = csvfile[0] == '-' ? stdout : fopen( csvfile, "w");
     if (!csvf || !heapf) {
         printf("Error opening file(s).\n");
         exit(1);
@@ -45,6 +45,7 @@ int main(int argc, char **argv)
     printf("TIME: %ld milliseconds\n", end_time - start_time);
 
     fclose(heapf);
-    fclose(csvf);
+    if (csvf != stdout)
+        fclose(csvf);
     return 0;
 }
