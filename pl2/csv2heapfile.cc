@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
 
         if (added == capacity) {
             // Write page to file and re-initialize.
-            write_page(&p, &heap, pid);
+            write_page(&heap, pid, &p);
             pid = alloc_page(&heap);
             read_page(&heap, pid, &p);
             page_count++;
@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
     }
 
     if (added > 0) {
-        write_page(&p, &heap, pid);
+        write_page(&heap, pid, &p);
         page_count++;
         total_records += added;
     }
