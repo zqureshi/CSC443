@@ -32,6 +32,8 @@ TEST(InitHeap, InitHeap) {
 
     ASSERT_EQ(PAGE_SIZE, heap.page_size);
     ASSERT_EQ(file, heap.file_ptr);
+
+    fclose(file);
 }
 
 TEST(HeapManager, AllocPage) {
