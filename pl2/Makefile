@@ -45,7 +45,7 @@ clean: clean-test
 test: $(TARGETS_TEST)
 
 run-test: test
-	for test in $(TARGETS_TEST); do ./$${test}; done
+	for test in $(TARGETS_TEST); do ./$${test} && echo; done
 
 test_%: tests/%.cc tests/runner.cc $(OBJS)
 	$(CC) -o $@ $(CCFLAGS) $(INCLUDES_TEST) $^ $(LIBS_TEST)
