@@ -322,14 +322,14 @@ bool write_page(Heapfile *heapfile, PageID pid, Page *page) {
 ////////////////////////////////////////////////////////////////////////////////
 // Page Iterator
 
-PageIterator::PageIterator(Page *page, const Schema &schema)
+PageRecordIterator::PageRecordIterator(Page *page, const Schema &schema)
         : schema_(schema), record_(schema) {
     slot_     = 0;
     page_     = page;
     capacity_ = fixed_len_page_capacity(page);
 }
 
-bool PageIterator::hasNext() {
+bool PageRecordIterator::hasNext() {
     // Page exhausted.
     if (slot_ >= capacity_) {
         return false;
@@ -344,13 +344,15 @@ bool PageIterator::hasNext() {
     return slot_ < capacity_;
 }
 
-Record PageIterator::peek() {
+Record PageRecordIterator::peek() {
+    assert(slot_ < capacity_);
     return record_;
 }
 
-Record PageIterator::next() {
+Record PageRecordIterator::next() {
     // We assume that hasNext has already been called.
     assert(slot_ < capacity_);
+
     slot_++;
     return record_;
 }
@@ -369,6 +371,8 @@ HeapDirectoryIterator::~HeapDirectoryIterator() {
 }
 
 Page *HeapDirectoryIterator::next() {
+    assert(hasNext());
+
     // Read the page
     fseek(heap_->file_ptr, dir_offset_, SEEK_SET);
     fread(directory_->data, heap_->page_size, 1, heap_->file_ptr);

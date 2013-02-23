@@ -41,9 +41,9 @@ bool write_page(Heapfile *heapfile, PageID pid, Page *page);
 /**
  * Iterates through all the records of a page.
  */
-class PageIterator {
+class PageRecordIterator {
     public:
-        PageIterator(Page *page, const Schema &schema = csvSchema);
+        PageRecordIterator(Page *page, const Schema &schema = csvSchema);
         bool hasNext();
         Record peek();
         Record next();
@@ -92,10 +92,10 @@ class RecordIterator {
         Page *page_;
 
         // Used to iterate through records of the current directory.
-        PageIterator *directory_iter_;
+        PageRecordIterator *directory_iter_;
 
         // Used to iterate through records of the current page.
-        PageIterator *page_iter_;
+        PageRecordIterator *page_iter_;
 };
 
 #endif /* HEAPMANAGER_H_ */
