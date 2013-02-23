@@ -414,6 +414,39 @@ bool HeapDirectoryIterator::hasNext() {
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+// Directory Page Iterator
+
+DirectoryPageIterator::DirectoryPageIterator(Heapfile *heap, Page *directory,
+                                             const Schema &schema)
+        : schema_(schema), dir_iter_(directory, heapSchema) {
+    heap_      = heap;
+    directory_ = directory;
+    page_      = _init_page(heap, schema);
+
+    dir_iter_.next(); // Discard header.
+}
+
+DirectoryPageIterator::~DirectoryPageIterator() {
+    _free_page(page_);
+}
+
+bool DirectoryPageIterator::hasNext() {
+    return dir_iter_.hasNext();
+}
+
+Page *DirectoryPageIterator::next() {
+    assert(dir_iter_.hasNext());
+
+    Record dirRecord = dir_iter_.next();
+    DirRecord *pageRecord = (DirRecord*) dirRecord.at(0);
+
+    fseek(heap_->file_ptr, pageRecord->offset, SEEK_SET);
+    fread(page_->data, heap_->page_size, 1, heap_->file_ptr);
+
+    return page_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Record Iterator
 
 RecordIterator::RecordIterator(Heapfile *heap, const Schema &schema)

@@ -74,6 +74,28 @@ class HeapDirectoryIterator {
         int dir_offset_;
 };
 
+/**
+ * Iterates through all the pages specified in a heap directory.
+ */
+class DirectoryPageIterator {
+    public:
+        DirectoryPageIterator(Heapfile *heap, Page *directory,
+                const Schema &schema = csvSchema);
+        ~DirectoryPageIterator();
+        bool hasNext();
+        Page *next();
+    private:
+        const Schema &schema_;
+        // Heap containing the pages.
+        Heapfile *heap_;
+        // Directory whose page records are being iterated through.
+        Page *directory_;
+        // Last read page.
+        Page *page_;
+        // Iterator used to iterate through page records in the directory.
+        PageRecordIterator dir_iter_;
+};
+
 class RecordIterator {
     public:
         RecordIterator(Heapfile *heap, const Schema &schema = csvSchema);
