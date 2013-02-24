@@ -17,15 +17,8 @@ typedef struct {
 
 Schema heapSchema(3, 4);
 
-inline PageID _get_new_id() {
-    /**
-     *  TODO: Make this global or store in heapfile. When reading new
-     *  heapfile then traverse whole file and figure out the largest
-     *  PageID and allocate subsequent ones from there.
-     *
-     */
-    static PageID id = 0;
-    return id++;
+inline PageID _get_new_id(Heapfile *heapfile) {
+    return heapfile->nextId++;
 }
 
 Page *_init_page(Heapfile *heapfile, const Schema& schema = heapSchema) {
@@ -129,6 +122,17 @@ void init_heapfile(Heapfile *heapfile, int page_size, FILE *file, bool newHeap) 
     heapfile->file_ptr = file;
     heapfile->page_size = page_size;
 
+    /**
+     * NOTE: Since we start PageID numbering at 0 even when opening a
+     * new heapfile, this would cause problems if you open a heapfile for
+     * reading and then try allocating new pages since they'll have the
+     * same PageIDs as old ones.
+     *
+     * Ideally we'd store the latest PageID in the heapfile itself and read
+     * it into memory when initializing a heapfile for reading.
+     */
+    heapfile->nextId = 0;
+
     /* Initialize primary directory page */
     Page *directory = _init_page(heapfile);
 
@@ -173,7 +177,7 @@ PageID alloc_page(Heapfile *heapfile, const Schema& schema) {
     /* Create directory record */
     fseek(file, 0, SEEK_END);
     int offset = ftell(file);
-    PageID pageId = _get_new_id();
+    PageID pageId = _get_new_id(heapfile);
     Record dirRecord(heapSchema);
     DirRecord *pageRecord = (DirRecord *) dirRecord.at(0);
 

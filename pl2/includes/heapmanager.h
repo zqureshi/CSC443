@@ -4,12 +4,13 @@
 #include <cstdio>
 #include "pagemanager.h"
 
+typedef int PageID;
+
 typedef struct {
     FILE *file_ptr;
     int page_size;
+    PageID nextId;
 } Heapfile;
-
-typedef int PageID;
 
 typedef struct {
     int page_offset;
