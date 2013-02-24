@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
         if (added == capacity) {
             // Write page to file and re-initialize.
             assert(write_page(&heap, alloc_page(&heap, schema), &p));
-            init_fixed_len_page(&p, page_size, recordSize);
+            memset(p.data, 0, p.page_size);
             page_count++;
             total_records += added;
             added = 0;
@@ -86,6 +86,9 @@ int main(int argc, char **argv) {
     printf("NUMBER OF RECORDS: %d\n", total_records);
     printf("NUMBER OF PAGES: %d\n", page_count);
     printf("TIME: %ld milliseconds\n", end_time - start_time);
+
+    /* Free up memory */
+    delete [] (char *) p.data;
 
     fclose(heapf);
     csvf.close();
