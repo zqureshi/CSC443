@@ -1,7 +1,9 @@
+import string
 import random
 import argparse
 
-LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+# LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+LETTERS = string.digits
 
 PARSER = argparse.ArgumentParser()
 PARSER.add_argument('--attr-len', '-a', metavar='SIZE', type=int,
