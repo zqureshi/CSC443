@@ -1,0 +1,2 @@
+No index: 409.072 milliseconds
+Index: 716.275 milliseconds
