@@ -29,7 +29,6 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    int record_count = 0;
     long start_time = now();
 
     Heapfile heap;
