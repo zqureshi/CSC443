@@ -20,3 +20,5 @@ query
 test_*.dSYM
 heap.bin
 csv.out.txt
+*.heap
+*.csv
