@@ -46,7 +46,7 @@ int main(int argc, char **argv)
         }
 
         // Get SUBSTRING(A2, 1, 5)
-        char *a2 = (char*)record.at(1); a2[5] = 0; a2++;
+        char *a2 = (char*)record.at(1); a2[5] = 0;
         std::string suba2(a2);
 
         counts[suba2]++;
