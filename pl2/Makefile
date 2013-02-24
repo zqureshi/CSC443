@@ -5,7 +5,7 @@ INCLUDES = -I. -I./includes
 
 LIBS_TEST = -pthread -lgtest -L.
 TARGETS = write_fixed_len_pages read_fixed_len_pages \
-		  csv2heapfile heapfile2csv query
+		  csv2heapfile heapfile2csv query csv2idxfile query_idx_heapfile
 
 TARGETS_TEST = test_serializer test_pagemanager test_heapmanager
 
@@ -30,6 +30,12 @@ heapfile2csv: heapfile2csv.o $(HEAPDEPS)
 	$(CC) -o $@ $(CCFLAGS) $(INCLUDES) $^
 
 query: query.o $(HEAPDEPS)
+	$(CC) -o $@ $(CCFLAGS) $(INCLUDES) $^
+	
+query_idx_heapfile: query_idx_heapfile.o $(HEAPDEPS)
+	$(CC) -o $@ $(CCFLAGS) $(INCLUDES) $^
+
+csv2idxfile: csv2idxfile.o $(HEAPDEPS)
 	$(CC) -o $@ $(CCFLAGS) $(INCLUDES) $^
 
 %.o: src/%.cc
