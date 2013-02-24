@@ -81,7 +81,9 @@ def main():
         t.set_color('g')
 
     # Add a legend
-    fig.legend((w_line, r_line), ('Write', 'Read'), loc='upper right')
+    fig.legend((w_line, r_line), ('write_fixed_len_page',
+                                  'read_fixed_len_page'),
+               loc='lower right')
 
     if args.output is not None:
         fig.savefig(args.output)
