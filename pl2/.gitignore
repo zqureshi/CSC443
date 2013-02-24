@@ -22,3 +22,5 @@ heap.bin
 csv.out.txt
 *.heap
 *.csv
+csv2idxfile
+query_idx_heapfile
