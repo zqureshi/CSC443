@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <string>
+#include <map>
 
 #include "library.h"
 #include "serializer.h"
@@ -16,10 +18,10 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    char *heapfile = *(argv++),
-         *start    = *(argv++),
-         *end      = *(argv++);
-    int page_size  = argc > 4 ? atoi(*argv) : 16384; // Default to 16K
+    char *heapfile = argv[1],
+         *start    = argv[2],
+         *end      = argv[3];
+    int page_size  = argc > 4 ? atoi(argv[4]) : 16384; // Default to 16K
 
     FILE *heapf = fopen(heapfile, "r");
     if (!heapf) {
@@ -33,21 +35,30 @@ int main(int argc, char **argv)
     Heapfile heap;
     init_heapfile(&heap, page_size, heapf);
 
+    std::map<std::string, int> counts;
     RecordIterator recordIter(&heap);
     while (recordIter.hasNext()) {
         Record record = recordIter.next();
         const char *a1 = record.at(0);
-        const char *a2 = record.at(1);
 
-        // TODO
-        // For each SUBSTRING(a2, 1, 5), get number of records that match that
-        // substring.
+        // If not (A1 >= start and A2 <= end), skip
+        if (strcmp(a1, start) < 0 || strcmp(a1, end) > 0) {
+            continue;
+        }
 
-        record_count++;
+        // Get SUBSTRING(A2, 1, 5)
+        char *a2 = (char*)record.at(1); a2[5] = 0; a2++;
+        std::string suba2(a2);
+
+        counts[suba2]++;
     }
 
     long end_time = now();
-    printf("NUMBER OF RECORDS: %d\n", record_count);
+
+    std::map<std::string, int>::iterator it;
+    for (it = counts.begin(); it != counts.end(); ++it)
+        printf("%s %d\n", it->first.c_str(), it->second);
+
     printf("TIME: %ld milliseconds\n", end_time - start_time);
 
     fclose(heapf);
