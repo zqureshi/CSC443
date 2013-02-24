@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
     int added = 0; // number of records added to the current page
 
     while (csvf) {
-        Record r;
+        Record r(schema);
 
         std::string buf;
         buf.reserve(recordSize);
@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
 
         if (added == capacity) {
             // Write page to file and re-initialize.
-            assert(write_page(&heap, alloc_page(&heap), &p));
+            assert(write_page(&heap, alloc_page(&heap, schema), &p));
             init_fixed_len_page(&p, page_size, recordSize);
             page_count++;
             total_records += added;
@@ -77,7 +77,7 @@ int main(int argc, char **argv) {
     }
 
     if (added > 0) {
-        write_page(&heap, alloc_page(&heap), &p);
+        write_page(&heap, alloc_page(&heap, schema), &p);
         page_count++;
         total_records += added;
     }
