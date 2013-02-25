@@ -9,7 +9,7 @@ Page Layout
 
 We used `mkcsv.py` to generate a CSV file with 5,000 entries. We then
 used `write_fixed_len_pages` and `read_fixed_len_pages` to store and
-retrieve the data into heap files. After running the experiment three
+retrieve the data into page files. After running the experiment three
 times on the data, we got the following results:
 
 ![First run][] ![Second run][] ![Third run][]
@@ -63,7 +63,7 @@ There is no organization of the data inside the pages and so a page has
 to be traversed completely to find a record whose offset within the page
 is not known.
 
-Secondly, the pages themselves are thrown into a heap file with no
+Secondly, the pages themselves are thrown into a page file with no
 ordering among them. This means that to search the file for a specific
 record, all records of all pages will have to be checked linearly.
 
