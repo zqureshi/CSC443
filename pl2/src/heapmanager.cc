@@ -122,6 +122,7 @@ void init_heapfile(Heapfile *heapfile, int page_size, FILE *file, bool newHeap) 
     /* Set file pointer and page sizes */
     heapfile->file_ptr = file;
     heapfile->page_size = page_size;
+    heapfile->last_dir_offset = DIR_OFFSET;
 
     /**
      * NOTE: Since we start PageID numbering at 0 even when opening a
@@ -193,30 +194,23 @@ PageID alloc_page(Heapfile *heapfile, const Schema& schema) {
 
     /**
      * Since we don't support page deletion, a new page can only be added
-     * to the last directory page so traverse list to the last page and
-     * try to add, if it is full then we need to create a new directory
-     * page and link it.
+     * to the last directory page so try to add, if it is full then we need
+     * to create a new directory page and link it.
      */
     Page *directory = _init_page(heapfile);
     Record hdrRecord(heapSchema);
     DirHdr *dirHdr;
 
-    int64_t directory_offset, next = DIR_OFFSET;
-    do {
-        /* Load directory page */
-        directory_offset = next;
-        fseeko(file, directory_offset, SEEK_SET);
-        fread(directory->data, page_size, 1, file);
+    /* Load directory page */
+    int64_t directory_offset = heapfile->last_dir_offset;
+    fseeko(file, directory_offset, SEEK_SET);
+    fread(directory->data, page_size, 1, file);
 
-        assert(true == read_fixed_len_page(directory, 0, &hdrRecord, heapSchema));
+    assert(true == read_fixed_len_page(directory, 0, &hdrRecord, heapSchema));
 
-        dirHdr = (DirHdr *) (hdrRecord.at(0));
-        assert(dirHdr->offset == directory_offset);
-        assert(dirHdr->sig == DIRHDR_SIG);
-
-        /* Set next pointer */
-        next = dirHdr->next;
-    } while(next != DIRHDR_NULL);
+    dirHdr = (DirHdr *) (hdrRecord.at(0));
+    assert(dirHdr->offset == directory_offset);
+    assert(dirHdr->sig == DIRHDR_SIG);
 
     /**
      * At this point should be at the last directory page, try adding record
@@ -229,6 +223,7 @@ PageID alloc_page(Heapfile *heapfile, const Schema& schema) {
         int64_t new_directory_offset = ftello(file);
 
         /* Update header in current directory page and write it */
+        heapfile->last_dir_offset = new_directory_offset;
         dirHdr->next = new_directory_offset;
         write_fixed_len_page(directory, 0, &hdrRecord, heapSchema);
 

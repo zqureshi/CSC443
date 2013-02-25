@@ -10,6 +10,7 @@ typedef struct {
     FILE *file_ptr;
     int page_size;
     PageID nextId;
+    int64_t last_dir_offset;
 } Heapfile;
 
 typedef struct {
