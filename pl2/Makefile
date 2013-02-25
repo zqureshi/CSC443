@@ -1,5 +1,5 @@
 CC = g++
-CCFLAGS = -Wall -g # -pedantic
+CCFLAGS = -Wall -g -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 # -pedantic
 OBJS = serializer.o pagemanager.o heapmanager.o library.o
 INCLUDES = -I. -I./includes
 
