@@ -41,7 +41,6 @@ int main(int argc, char **argv) {
     int page_count = 0;
     int capacity = fixed_len_page_capacity(&p);
     int added = 0; // number of records added to the current page
-
     while (csvf) {
         Record r;
 
@@ -67,7 +66,7 @@ int main(int argc, char **argv) {
         if (added == capacity) {
             // Write page to file and re-initialize.
             assert(write_page(&heap, alloc_page(&heap), &p));
-            init_fixed_len_page(&p, page_size, RECORD_SIZE);
+            memset(p.data, 0, page_size);
             page_count++;
             total_records += added;
             added = 0;
@@ -84,6 +83,9 @@ int main(int argc, char **argv) {
     printf("NUMBER OF RECORDS: %d\n", total_records);
     printf("NUMBER OF PAGES: %d\n", page_count);
     printf("TIME: %ld milliseconds\n", end_time - start_time);
+
+    /* Free page */
+    delete [] (char *) p.data;
 
     fclose(heapf);
     csvf.close();
