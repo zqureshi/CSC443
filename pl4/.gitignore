@@ -8,3 +8,4 @@ leveldb/*
 tags
 csv2leveldb
 query_leveldb
+csv2idx_leveldb
