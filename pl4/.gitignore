@@ -2,3 +2,9 @@
 ./query_leveldb
 ./csv2leveldb
 leveldb/*
+.clang_complete
+*.csv
+*.db
+tags
+csv2leveldb
+query_leveldb
