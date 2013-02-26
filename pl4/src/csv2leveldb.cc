@@ -16,7 +16,6 @@ inline long now() {
 
 Schema schema(100, 10);
 int recordSize = fixed_len_sizeof(NULL, schema);
-long unique_counter = 0;
 
 int main(int argc, char **argv) {
     // Read arguments.
@@ -59,7 +58,7 @@ int main(int argc, char **argv) {
         std::istringstream stream(buffer);
         int position = 0;
 
-        char unique_key[schema.attrLen + sizeof(long)];
+        char key[schema.attrLen];
         while (stream && position < schema.numAttrs) {
             // Read the next attribute into the Record.
             char attribute[schema.attrLen + 1];
@@ -67,19 +66,15 @@ int main(int argc, char **argv) {
             strcpy((char*)record.at(position++), attribute);
 
             // A1 is the key.
-            if (position == 0) {
-                memcpy(unique_key, attribute, schema.attrLen);
-                memcpy(unique_key + schema.attrLen, &unique_counter,
-                        sizeof(long));
-                unique_counter++;
-            }
+            if (position == 0)
+                memcpy(key, attribute, schema.attrLen);
         }
 
         // Add record to database.
-        leveldb::Slice   key(unique_key);
+        leveldb::Slice keySlice(key);
         leveldb::Slice value(record.at(0), recordSize);
 
-        if (!db->Put(writeOptions, key, value).ok()) {
+        if (!db->Put(writeOptions, keySlice, value).ok()) {
             printf("WARNING: Error writing record: %s\n", buffer.c_str());
         }
         recordCount++;
