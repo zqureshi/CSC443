@@ -9,3 +9,4 @@ tags
 csv2leveldb
 query_leveldb
 csv2idx_leveldb
+query_idx_leveldb

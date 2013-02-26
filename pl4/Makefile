@@ -2,7 +2,7 @@ CC = g++
 CCFLAGS = -Wall -g -Wextra
 INCLUDES = -I. -I./include
 OBJECTS = serializer.o
-TARGETS = csv2leveldb query_leveldb csv2idx_leveldb
+TARGETS = csv2leveldb query_leveldb csv2idx_leveldb query_idx_leveldb
 LDFLAGS  = -lpthread -lsnappy
 
 ## Project Build
@@ -11,6 +11,9 @@ LDFLAGS  = -lpthread -lsnappy
 all: $(TARGETS) $(OBJS)
 
 query_leveldb: query_leveldb.o serializer.o libleveldb.a
+	$(CC) -o $@ $(CCFLAGS) $(LDFLAGS) $(INCLUDES) $^
+
+query_idx_leveldb: query_idx_leveldb.o libleveldb.a
 	$(CC) -o $@ $(CCFLAGS) $(LDFLAGS) $(INCLUDES) $^
 
 csv2leveldb: csv2leveldb.o serializer.o libleveldb.a

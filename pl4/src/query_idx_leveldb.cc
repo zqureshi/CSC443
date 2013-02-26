@@ -6,7 +6,6 @@
 #include <map>
 #include <sys/timeb.h>
 
-#include "serializer.h"
 #include "leveldb/db.h"
 #include "leveldb/comparator.h"
 
@@ -16,8 +15,7 @@ inline long now() {
     return t.time * 1000 + t.millitm;
 }
 
-Schema schema(100, 10);
-int recordSize = fixed_len_sizeof(NULL, schema);
+int attributeLength = 10;
 
 int main(int argc, char **argv) {
     // Read arguments.
@@ -39,10 +37,10 @@ int main(int argc, char **argv) {
     }
 
     long start_time = now();
-    leveldb::Iterator *it = db->NewIterator(leveldb::ReadOptions());
-    Record record(schema);
 
+    leveldb::Iterator *it = db->NewIterator(leveldb::ReadOptions());
     std::map<std::string, int> counts;
+
     for (it->Seek(start); it->Valid(); it->Next()) {
         leveldb::Slice key = it->key();
         leveldb::Slice value = it->value();
@@ -50,12 +48,8 @@ int main(int argc, char **argv) {
         if (options.comparator->Compare(key, end) > 0)
             break;
 
-        fixed_len_read((void*)value.data(), recordSize, &record, schema);
-        char *a2 = (char*)record.at(1); a2[5] = 0;
+        char *a2 = (char*)value.data(); a2[5] = 0;
         counts[std::string(a2)]++;
-
-        // Clear record for next iteration.
-        memset((char*)record.at(0), 0, recordSize);
     }
 
     long end_time = now();
