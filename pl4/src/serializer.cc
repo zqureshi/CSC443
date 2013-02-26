@@ -57,7 +57,7 @@ Record::~Record() {
 /**
  * Inline implementation of fixed_len_sizeof()
  */
-inline int _fixed_len_sizeof(Record *record, const Schema& schema) {
+inline int _fixed_len_sizeof(Record * /*record*/, const Schema& schema) {
     return schema.numAttrs * schema.attrLen;
 }
 
@@ -122,7 +122,7 @@ void var_len_write(Record *record, void *buf, const Schema& schema) {
 /**
  * Deserialize the `buf` which contains the variable record encoding.
  */
-void var_len_read(void *buf, int size, Record *record, const Schema& schema) {
+void var_len_read(void *buf, int /*size*/, Record *record, const Schema& schema) {
     int *header = (int *) buf;
     for(int i = 0; i < schema.numAttrs; i++) {
         memcpy((char *) record->at(i), (char *) buf + header[i], header[i+1] - header[i]);

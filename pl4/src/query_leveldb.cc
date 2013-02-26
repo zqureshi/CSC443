@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
+#include <map>
 #include <sys/timeb.h>
 
 #include "serializer.h"
@@ -31,7 +32,6 @@ int main(int argc, char **argv) {
     // Set up leveldb database
     leveldb::DB *db;
     leveldb::Options options;
-    options.create_if_missing = true;
     leveldb::Status status = leveldb::DB::Open(options, db_name, &db);
     if (!status.ok()) {
         printf("Error opening database with name '%s'.\n", db_name);
@@ -43,6 +43,7 @@ int main(int argc, char **argv) {
     leveldb::Slice startSlice = start;
     Record record(schema);
 
+    std::map<std::string, int> counts;
     for (it->Seek(start); it->Valid(); it->Next()) {
         leveldb::Slice key = it->key();
         leveldb::Slice value = it->value();
@@ -50,17 +51,20 @@ int main(int argc, char **argv) {
         if (options.comparator->Compare(key, end) > 0)
             break;
 
-        printf("%s\n", value.data());
-
-
         fixed_len_read((void*)value.data(), recordSize, &record, schema);
-        // TODO do query stuff
+        char *a2 = (char*)record.at(1); a2[5] = 0;
+        counts[std::string(a2)]++;
 
         // Clear record for next iteration.
         memset((char*)record.at(0), 0, recordSize);
     }
 
     long end_time = now();
+
+    std::map<std::string, int>::iterator mit;
+    for (mit = counts.begin(); mit != counts.end(); ++mit)
+        printf("%s %d\n", mit->first.c_str(), mit->second);
+
     printf("TIME: %ld milliseconds\n", end_time - start_time);
 
     delete db;
