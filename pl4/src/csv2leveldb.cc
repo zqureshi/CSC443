@@ -59,15 +59,17 @@ int main(int argc, char **argv) {
         int position = 0;
 
         char key[schema.attrLen];
+        memset(key, 0, schema.attrLen);
         while (stream && position < schema.numAttrs) {
-            // Read the next attribute into the Record.
+            // Read the next attribute
             char attribute[schema.attrLen + 1];
             assert(stream.getline(attribute, schema.attrLen + 1, ','));
-            strcpy((char*)record.at(position++), attribute);
 
             // A1 is the key.
             if (position == 0)
                 memcpy(key, attribute, schema.attrLen);
+
+            strcpy((char*)record.at(position++), attribute);
         }
 
         // Add record to database.
