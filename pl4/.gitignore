@@ -13,3 +13,4 @@ query_idx_leveldb
 *.hi
 mkcsv
 collect
+gcollect
