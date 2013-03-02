@@ -30,6 +30,7 @@ int main(int argc, char **argv) {
     // Set up leveldb database
     leveldb::DB *db;
     leveldb::Options options;
+    options.block_size = 65536;
     leveldb::Status status = leveldb::DB::Open(options, db_name, &db);
     if (!status.ok()) {
         printf("Error opening database with name '%s'.\n", db_name);

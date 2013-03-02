@@ -29,6 +29,7 @@ int main(int argc, char **argv) {
     // Set up leveldb database
     leveldb::DB *db;
     leveldb::Options options;
+    options.block_size = 65536;
     options.create_if_missing = true;
     options.error_if_exists = true;
 

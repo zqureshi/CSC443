@@ -29,6 +29,7 @@ int main(int argc, char **argv) {
     leveldb::Options options;
     options.create_if_missing = true;
     options.error_if_exists = true;
+    options.block_size = 65536;
 
     leveldb::Status status = leveldb::DB::Open(options, db_name, &db);
     if (!status.ok()) {
