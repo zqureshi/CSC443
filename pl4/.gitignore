@@ -12,5 +12,6 @@ csv2idx_leveldb
 query_idx_leveldb
 *.hi
 mkcsv
-collect
-gcollect
+collect_btree
+collect_heap
+*.heap

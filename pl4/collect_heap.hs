@@ -1,28 +1,46 @@
-{-# LANGUAGE ExtendedDefaultRules #-}
-{-# LANGUAGE OverloadedStrings    #-}
-{-# LANGUAGE QuasiQuotes          #-}
-{-# OPTIONS_GHC -fno-warn-type-defaults #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes       #-}
 
 module Main (main) where
 
-import           Control.Monad         (forM_, void)
+import           Control.Monad         (forM_)
 import           Data.Char             (ord)
 import qualified Data.Text.Lazy        as T
-import qualified Data.Text.Lazy.IO     as TIO
 import           Prelude               hiding (FilePath)
 import           Shelly
-import           System.Environment    (getArgs, getProgName)
-import           System.Exit           (exitFailure)
 import           Text.Shakespeare.Text (lt)
 
 default (T.Text)
 
+csv2heap, queryHeap, csv2denseHeap, queryDenseHeap :: FilePath
+
+csv2heap  = "../pl2-3/csv2heapfile"
+queryHeap = "../pl2-3/query"
+
+csv2denseHeap  = "../pl2-3/csv2idxfile"
+queryDenseHeap = "../pl2-3/query_idx_heapfile"
+
+csv, heap :: T.Text
+csv  = "./in.csv"
+heap = "./out.heap"
+
+heapPath :: FilePath
+heapPath = "./out.heap"
+
+pageSize :: Int
+pageSize = 65536
+
 printTimes :: FilePath -> FilePath -> Sh ()
 printTimes csv2db querydb = do
+    let page = T.pack (show pageSize)
+
+    whenM (test_f heapPath) $ do
+        echo_err "Removing existing heap."
+        rm_f heapPath
+
     echo_err "Generating database."
-    void $ print_stdout False
-         $ escaping False
-         $ cmd csv2db
+    print_stdout False
+         $ run_ csv2db [csv, heap, page]
 
     echo_n_err "Querying: "
     forM_ ['A'..'Z'] $ \c -> do
@@ -30,9 +48,9 @@ printTimes csv2db querydb = do
 
         let charIndex = T.pack . show $ ord c - ord 'A'
         t <-    print_stdout False
-             $  escaping False
              $  T.strip
-            <$> cmd querydb "AA" (T.pack [c, 'Z']) -|- run "tail" ["-n1"]
+            <$> run querydb [heap, "AA", T.pack [c, 'Z'], page]
+            -|- run "tail" ["-n1"]
 
         unless (isValidTimeOutput t) $
             errorExit [lt|Error while querying for #{T.singleton c}: #{t}|]
@@ -49,13 +67,11 @@ getTime :: T.Text -> T.Text
 getTime = head . tail . T.words
 
 main :: IO ()
-main = do
-    args <- map T.pack <$> getArgs
-    unless (length args == 2) $ do
-        progName <- T.pack <$> getProgName
-        TIO.putStrLn [lt|USAGE: #{progName} <csv2db command> <querydb command>|]
-        exitFailure
+main = shelly $ do
+    echo "Heap file:"
+    printTimes csv2heap queryHeap
 
-    let csv2db = fromText $ head args
-        querydb = fromText $ args !! 1
-    shelly $ printTimes csv2db querydb
+    echo ""
+    echo "Dense Heap:"
+    printTimes csv2denseHeap queryDenseHeap
+
