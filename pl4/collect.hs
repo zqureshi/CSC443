@@ -1,12 +1,13 @@
-{-# LANGUAGE OverloadedStrings, QuasiQuotes #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes       #-}
 module Main (main) where
 
-import Prelude hiding (FilePath)
-import Shelly
-import Data.Char (ord)
-import Control.Monad (forM_)
-import qualified Data.Text.Lazy as T
-import Text.Shakespeare.Text (lt)
+import           Control.Monad         (forM_)
+import           Data.Char             (ord)
+import qualified Data.Text.Lazy        as T
+import           Prelude               hiding (FilePath)
+import           Shelly
+import           Text.Shakespeare.Text (lt)
 
 csv2levelDB, queryLevelDB, csv2indexLevelDB, queryIndexLevelDB :: FilePath
 csv2levelDB = "./csv2leveldb"
@@ -53,7 +54,7 @@ main :: IO ()
 main = shelly $ do
     echo "LevelDB Database:"
     printTimes csv2levelDB queryLevelDB
-    
+
     echo ""
     echo "LevelDB Index:"
     printTimes csv2indexLevelDB queryIndexLevelDB
