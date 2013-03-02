@@ -48,8 +48,8 @@ int main(int argc, char **argv) {
         if (options.comparator->Compare(key, end) > 0)
             break;
 
-        char *a2 = (char*)value.data(); a2[5] = 0;
-        counts[std::string(a2)]++;
+        std::string a2(value.data());
+        counts[a2.substr(0, 5)]++;
     }
 
     long end_time = now();
