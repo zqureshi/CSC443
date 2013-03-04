@@ -40,7 +40,7 @@ fig.subplots_adjust(bottom=0.15)  # a little trick to add some space for the
 plt.legend(loc='best')
 plt.xlabel('Letters')
 plt.ylabel('Time (in milliseconds)')
-plt.suptitle('With and Without Index; 100,000 Records')
+plt.suptitle('%s with and Without Index; 100,000 Records' % name.capitalize())
 
 # save your plot and see it
 if args.output is not None:
