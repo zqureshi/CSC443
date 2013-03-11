@@ -4,8 +4,9 @@ import           Control.Monad
 import           Control.Monad.IO.Class   (liftIO)
 import qualified Data.ByteString          as BS
 import qualified Data.ByteString.Internal as BSI
-import           Data.Char                (ord)
 import           Data.Conduit
+import qualified Data.Conduit.List        as CL
+import           Data.List                (sort)
 import           Data.Word                (Word8)
 import           Foreign.ForeignPtr       (ForeignPtr, finalizeForeignPtr,
                                            withForeignPtr)
@@ -26,17 +27,17 @@ hGetBufSome handle ptr count = do
 -- size.
 --
 -- This is similar to @sourceFile@ except that the same block of memory is
--- re-used. So, only one block is accessible at a time. Trying to group the
--- bytestrings will result in nothing but pain and misery.
+-- re-used. So, only one block is accessible at a time. Trying to group
+-- multiple blocks returned by this without copying them will only result in
+-- pain and misery.
 sourceBlocks
     :: MonadResource m
     => Int              -- ^ Size of the buffer used while reading the file.
     -> FilePath         -- ^ Path to the file.
     -> Producer m BS.ByteString
 sourceBlocks bsize fp =
-    -- The following two lines open the file and allocate the block.
-    -- @bracketP@ ensures that these resources will be freed as soon as their
-    -- use is finished.
+    -- Open the file and allocate the block. Ensure they're both freed once
+    -- we're done here.
     bracketP (IO.openBinaryFile fp IO.ReadMode) IO.hClose $ \h ->
     bracketP (BSI.mallocByteString bsize) finalizeForeignPtr $ \ptr ->
     loop h ptr
@@ -46,24 +47,32 @@ sourceBlocks bsize fp =
         unless (BS.null bs) $
             yield bs >> loop h ptr
 
--- | Split incoming bytestrings at newline. If a bytestring does not contain a
--- newline, this will yield it anyway.
---
--- So, this really only works correctly if block sizes are aligned with line
--- sizes. That is, if the block size is a multiple of line size (incl.
--- newline).
-lines :: Monad m => Conduit BS.ByteString m BS.ByteString
-lines = awaitForever $ \bs ->
-    case BS.elemIndex newline bs of
-        Nothing -> yield bs
-        Just i  -> yield (BS.take (i-1) bs)
-                >> yield (BS.drop i bs)
-  where newline = fromIntegral (ord '\n')
+-- | Split incoming chunks of @ByteString@s on line breaks.
+-- Empty strings will be discarded.
+splitLines :: Monad m => Conduit BS.ByteString m [BS.ByteString]
+splitLines = CL.map $ filter (not . BS.null) . BS.split 0x0a
 
+-- | Write lists of byte strings out to the given file, adding a new line
+-- after each.
+writeLines :: MonadResource m => FilePath -> Sink [BS.ByteString] m ()
+writeLines fp = bracketP (IO.openBinaryFile fp IO.WriteMode) IO.hClose
+              $ CL.mapM_ . mapM_ . puts
+  where
+    puts h s = liftIO $ BS.hPut h s >> BS.hPut h newline
+    newline = BS.singleton 0x0a
+
+-- Size of records being sorted in bytes. This includes the new line.
+recordSize :: Int
+recordSize = 9
 
 -- | @makeRuns input output length@ makes runs of length @length@ in @output@.
-makeRuns :: FilePath -> FilePath -> Integer -> IO ()
-makeRuns = undefined
+--
+-- @length@ specifies the number of records, not the number of bytes.
+makeRuns :: FilePath -> FilePath -> Int -> IO ()
+makeRuns inFile outFile runLength = runResourceT    $
+       sourceBlocks (runLength * recordSize) inFile $=
+       splitLines =$= awaitForever (yield . sort)   $$
+       writeLines outFile
 
 main :: IO ()
 main = do
@@ -79,7 +88,4 @@ main = do
         memCapacity         = read (head rest) :: Int
         k                   = read (last rest) :: Int
 
-    runResourceT
-        $  sourceBlocks memCapacity inFile
-        $= lines
-        $$ awaitForever (liftIO . BS.hPut IO.stdout)
+    makeRuns inFile outFile (memCapacity `quot` recordSize)
