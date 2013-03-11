@@ -15,6 +15,10 @@ import           System.Environment       (getArgs, getProgName)
 import           System.Exit              (exitFailure)
 import qualified System.IO                as IO
 
+------------------------------------------------------------------------------
+-- I/O
+------------------------------------------------------------------------------
+
 -- | Similar to @System.IO.hGetBufSome@. Reads a ByteString into an existing
 -- buffer and returns a ByteString referencing that buffer.
 hGetBufSome :: IO.Handle -> ForeignPtr Word8 -> Int -> IO BS.ByteString
@@ -22,6 +26,16 @@ hGetBufSome handle ptr count = do
     bytesRead <- withForeignPtr ptr $ \p ->
                  IO.hGetBufSome handle p count
     return $! BSI.PS ptr 0 bytesRead -- <- Unsafe
+
+------------------------------------------------------------------------------
+-- Sources, Conduits, etc.
+------------------------------------------------------------------------------
+
+
+-- | A Conduit that takes incoming lists and yields all their elements.
+splat :: Monad m => Conduit [a] m a
+splat = awaitForever $ mapM_ yield
+
 
 -- | Similar to @sourceBlocks@ except that this can operate on an existing
 -- handle.
@@ -40,9 +54,6 @@ sourceBlocksHandle bsize h =
         unless (BS.null bs) $
             yield bs >> loop ptr
 
--- | A Conduit that takes incoming lists and yields all their elements.
-splat :: Monad m => Conduit [a] m a
-splat = awaitForever $ mapM_ yield
 
 -- | Stream the contents of the given file as binary data. Use the given block
 -- size.
@@ -63,23 +74,12 @@ sourceBlocks bsize fp =
     bracketP (IO.openBinaryFile fp IO.ReadMode) IO.hClose $
     sourceBlocksHandle bsize
 
+
 -- | Split incoming chunks of @ByteString@s on line breaks.
 -- Empty strings will be discarded.
 splitLines :: Monad m => Conduit BS.ByteString m [BS.ByteString]
 splitLines = CL.map $ filter (not . BS.null) . BS.split 0x0a
 
--- | Write lists of byte strings out to the given file, adding a new line
--- after each.
-writeLines :: MonadResource m => FilePath -> Sink [BS.ByteString] m ()
-writeLines fp = bracketP (IO.openBinaryFile fp IO.WriteMode) IO.hClose
-              $ CL.mapM_ . mapM_ . puts
-  where
-    puts h s = liftIO $ BS.hPut h s >> BS.hPut h newline
-    newline = BS.singleton 0x0a
-
--- Size of records being sorted in bytes. This includes the new line.
-recordSize :: Int
-recordSize = 9
 
 -- | Version of @sortedRunSource@ that accepts an open handle.
 sortedRunSourceHandle
@@ -100,6 +100,7 @@ sortedRunSourceHandle h start runLength bufSize = do
     -- less than the original buffer size.
     realBufSize = (bufSize `quot` recordSize) * recordSize
 
+
 -- | @sortedRunSourceHandle fp start runLen bufSize@ iterates through the
 -- sorted run of size @runLen@ in the file @fp@ starting at offset @start@. A
 -- buffer of size @bufSize@ is used to read the data.
@@ -114,14 +115,27 @@ sortedRunSource fp start runLen bsize =
     bracketP (IO.openBinaryFile fp IO.ReadMode) IO.hClose $ \h ->
     sortedRunSourceHandle h start runLen bsize
 
+
+------------------------------------------------------------------------------
+-- msort
+------------------------------------------------------------------------------
+
+-- Size of records being sorted in bytes. This includes the new line.
+recordSize :: Int
+recordSize = 9
+
 -- | @makeRuns input output length@ makes runs of length @length@ in @output@.
 --
 -- @length@ specifies the number of records, not the number of bytes.
 makeRuns :: FilePath -> FilePath -> Int -> IO ()
-makeRuns inFile outFile runLength = runResourceT    $
-       sourceBlocks (runLength * recordSize) inFile $=
-       splitLines =$= awaitForever (yield . sort)   $$
-       writeLines outFile
+makeRuns inFile outFile runLength = runResourceT $
+    sourceBlocks (runLength * recordSize) inFile $=
+    splitLines =$= CL.map sort =$= splat         $$
+    bracketP (IO.openBinaryFile outFile IO.WriteMode) IO.hClose
+             (CL.mapM_ . puts)
+  where
+    puts h s = liftIO $ BS.hPut h s >> BS.hPut h newline
+    newline = BS.singleton 0x0a
 
 main :: IO ()
 main = do
