@@ -36,14 +36,14 @@ splat :: Monad m => Conduit [a] m a
 splat = awaitForever $ mapM_ yield
 
 
--- | Similar to @sourceBlocks@ except that this can operate on an existing
+-- | Similar to @sourceFile@ except that this can operate on an existing
 -- handle.
-sourceBlocksHandle
+sourceFileHandle
     :: MonadResource m
     => Int          -- ^ Size of the buffer used to read blocks
     -> IO.Handle    -- ^ File Handle
     -> Producer m BS.ByteString
-sourceBlocksHandle bsize h =
+sourceFileHandle bsize h =
     -- Allocate the block and ensure it is freed after we are done.
     bracketP (BSI.mallocByteString bsize) finalizeForeignPtr $ \ptr ->
     loop ptr
@@ -57,43 +57,39 @@ sourceBlocksHandle bsize h =
 -- | Stream the contents of the given file as binary data. Use the given block
 -- size.
 --
--- This is similar to @sourceFile@ except that the same block of memory is
--- re-used. So, only one block is accessible at a time. Trying to group
--- multiple blocks returned by this without copying them will only result in
--- pain and misery.
-sourceBlocks
-    :: MonadResource m
-    => Int              -- ^ Size of the buffer used while reading the file.
-    -> FilePath         -- ^ Path to the file.
-    -> Producer m BS.ByteString
-sourceBlocks bsize fp =
+-- This is similar to @Conduit.Binary.sourceFile@ except that the same block
+-- of memory is re-used. So, only one block is accessible at a time. Trying to
+-- group multiple blocks returned by this without copying them will only
+-- result in pain and misery.
+sourceFile :: MonadResource m => Int -> FilePath -> Producer m BS.ByteString
+sourceFile bsize fp =
     -- Open the file and allocate the block. Ensure they're both freed once
     -- we're done here.
     -- Open the file and ensure it is closed after we are done.
     bracketP (IO.openBinaryFile fp IO.ReadMode) IO.hClose $
-    sourceBlocksHandle bsize
+    sourceFileHandle bsize
 
 
--- | Split incoming chunks of @ByteString@s on line breaks.
--- Empty strings will be discarded.
-splitLines :: Monad m => Conduit BS.ByteString m [BS.ByteString]
-splitLines = CL.map $ filter (not . BS.null) . BS.split 0x0a
+-- | Split incoming chunks of @ByteString@s on line breaks. Empty strings will
+-- be discarded.
+lines :: Monad m => Conduit BS.ByteString m [BS.ByteString]
+lines = CL.map $ filter (not . BS.null) . BS.split 0x0a
 
 
--- | @sortedRunSourceHandle h start runLen bufSize@ iterates through the
--- sorted run of size @runLen@ in the file @h@ starting at offset @start@. A
--- buffer of size @bufSize@ is used to read the data.
-sortedRunSource
+-- | @sourceSortedRun h start runLen bufSize@ iterates through the sorted run
+-- of size @runLen@ in the file @h@ starting at offset @start@. A buffer of
+-- size @bufSize@ is used to read the data.
+sourceSortedRun
     :: MonadResource m
     => IO.Handle   -- ^ Handle to the file
     -> Int         -- ^ Position at which the run starts
     -> Int         -- ^ Number of records in the run
     -> Int         -- ^ Size of the buffer used to read the data
     -> Source m BS.ByteString
-sortedRunSource h start runLength bufSize = do
+sourceSortedRun h start runLength bufSize = do
     liftIO $ IO.hSeek h IO.AbsoluteSeek (fromIntegral start)
-    sourceBlocksHandle realBufSize h
-        $= splitLines
+    sourceFileHandle realBufSize h
+        $= lines
         $= splat
         $= CL.isolate runLength
   where
@@ -111,15 +107,17 @@ recordSize :: Int
 recordSize = 9
 
 -- | @makeRuns input output length@ makes runs of length @length@ in @output@.
---
 -- @length@ specifies the number of records, not the number of bytes.
 makeRuns :: FilePath -> FilePath -> Int -> IO ()
 makeRuns inFile outFile runLength = runResourceT $
-    sourceBlocks (runLength * recordSize) inFile $=
-    splitLines =$= CL.map sort =$= splat         $$
-    bracketP (IO.openBinaryFile outFile IO.WriteMode) IO.hClose
-             (CL.mapM_ . puts)
+    sourceFile blockSize inFile   $=
+    lines $= CL.map sort $= splat $$
+    bracketP openFile IO.hClose (CL.mapM_ . puts)
   where
+    -- Number of bytes consumed by @runLength@ records.
+    blockSize = runLength * recordSize
+    openFile = IO.openBinaryFile outFile IO.WriteMode
+    -- Write the given bytestring to the handle and add a newline.
     puts h s = liftIO $ BS.hPut h s >> BS.hPut h newline
     newline = BS.singleton 0x0a
 
