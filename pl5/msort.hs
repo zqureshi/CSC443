@@ -1,4 +1,4 @@
-module Main where
+module Main (main) where
 
 import           Control.Monad
 import           Control.Monad.IO.Class   (liftIO)
@@ -30,7 +30,6 @@ hGetBufSome handle ptr count = do
 ------------------------------------------------------------------------------
 -- Sources, Conduits, etc.
 ------------------------------------------------------------------------------
-
 
 -- | A Conduit that takes incoming lists and yields all their elements.
 splat :: Monad m => Conduit [a] m a
@@ -81,15 +80,17 @@ splitLines :: Monad m => Conduit BS.ByteString m [BS.ByteString]
 splitLines = CL.map $ filter (not . BS.null) . BS.split 0x0a
 
 
--- | Version of @sortedRunSource@ that accepts an open handle.
-sortedRunSourceHandle
+-- | @sortedRunSourceHandle h start runLen bufSize@ iterates through the
+-- sorted run of size @runLen@ in the file @h@ starting at offset @start@. A
+-- buffer of size @bufSize@ is used to read the data.
+sortedRunSource
     :: MonadResource m
     => IO.Handle   -- ^ Handle to the file
     -> Int         -- ^ Position at which the run starts
     -> Int         -- ^ Number of records in the run
     -> Int         -- ^ Size of the buffer used to read the data
     -> Source m BS.ByteString
-sortedRunSourceHandle h start runLength bufSize = do
+sortedRunSource h start runLength bufSize = do
     liftIO $ IO.hSeek h IO.AbsoluteSeek (fromIntegral start)
     sourceBlocksHandle realBufSize h
         $= splitLines
@@ -99,21 +100,6 @@ sortedRunSourceHandle h start runLength bufSize = do
     -- Change buffer size to the closest multiple of the recordSize that is
     -- less than the original buffer size.
     realBufSize = (bufSize `quot` recordSize) * recordSize
-
-
--- | @sortedRunSourceHandle fp start runLen bufSize@ iterates through the
--- sorted run of size @runLen@ in the file @fp@ starting at offset @start@. A
--- buffer of size @bufSize@ is used to read the data.
-sortedRunSource
-    :: MonadResource m
-    => FilePath    -- ^ Path to the file
-    -> Int         -- ^ Position at which the run starts
-    -> Int         -- ^ Number of records in the run
-    -> Int         -- ^ Size of the buffer used to read the data
-    -> Source m BS.ByteString
-sortedRunSource fp start runLen bsize =
-    bracketP (IO.openBinaryFile fp IO.ReadMode) IO.hClose $ \h ->
-    sortedRunSourceHandle h start runLen bsize
 
 
 ------------------------------------------------------------------------------
@@ -136,6 +122,18 @@ makeRuns inFile outFile runLength = runResourceT $
   where
     puts h s = liftIO $ BS.hPut h s >> BS.hPut h newline
     newline = BS.singleton 0x0a
+
+-- @mergeRuns f runLen bufSize runs@ merges runs starting at the given
+-- positions into the given file.
+mergeRuns :: FilePath -> Int -> Int -> [Int] -> IO ()
+mergeRuns fp runLen bsize pos = undefined -- TODO
+-- Algorithm:
+--      buf[i] = run[i].next for all i
+--      do
+--          min, i = min(buf)
+--          yield min
+--          buf[i] = run[i].next
+--      until (buf[i] = Nothing for all i)
 
 main :: IO ()
 main = do
