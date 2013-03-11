@@ -2,11 +2,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Main (main) where
 
-import Control.Monad
-import System.Exit (exitFailure)
-import System.Environment (getArgs, getProgName)
+import           Control.Monad
 import           Data.ByteString.Char8 (ByteString)
 import qualified Data.ByteString.Char8 as BS
+import           System.Environment    (getArgs, getProgName)
+import           System.Exit           (exitFailure)
 import           System.Random
 
 attributeLength :: Int
