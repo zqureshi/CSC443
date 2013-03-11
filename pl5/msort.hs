@@ -4,10 +4,12 @@ import           Control.Monad
 import           Control.Monad.IO.Class   (liftIO)
 import qualified Data.ByteString          as BS
 import qualified Data.ByteString.Internal as BSI
+import           Data.Char                (ord)
 import           Data.Conduit
 import           Data.Word                (Word8)
 import           Foreign.ForeignPtr       (ForeignPtr, finalizeForeignPtr,
                                            withForeignPtr)
+import           Prelude                  hiding (lines)
 import           System.Environment       (getArgs, getProgName)
 import           System.Exit              (exitFailure)
 import qualified System.IO                as IO
@@ -24,7 +26,8 @@ hGetBufSome handle ptr count = do
 -- size.
 --
 -- This is similar to @sourceFile@ except that the same block of memory is
--- re-used.
+-- re-used. So, only one block is accessible at a time. Trying to group the
+-- bytestrings will result in nothing but pain and misery.
 sourceBlocks
     :: MonadResource m
     => Int              -- ^ Size of the buffer used while reading the file.
@@ -42,6 +45,21 @@ sourceBlocks bsize fp =
         bs <- liftIO $ hGetBufSome h ptr bsize
         unless (BS.null bs) $
             yield bs >> loop h ptr
+
+-- | Split incoming bytestrings at newline. If a bytestring does not contain a
+-- newline, this will yield it anyway.
+--
+-- So, this really only works correctly if block sizes are aligned with line
+-- sizes. That is, if the block size is a multiple of line size (incl.
+-- newline).
+lines :: Monad m => Conduit BS.ByteString m BS.ByteString
+lines = awaitForever $ \bs ->
+    case BS.elemIndex newline bs of
+        Nothing -> yield bs
+        Just i  -> yield (BS.take (i-1) bs)
+                >> yield (BS.drop i bs)
+  where newline = fromIntegral (ord '\n')
+
 
 -- | @makeRuns input output length@ makes runs of length @length@ in @output@.
 makeRuns :: FilePath -> FilePath -> Integer -> IO ()
@@ -61,6 +79,7 @@ main = do
         memCapacity         = read (head rest) :: Int
         k                   = read (last rest) :: Int
 
-    runResourceT $
-        sourceBlocks memCapacity inFile $$
-        awaitForever (liftIO . BS.hPut IO.stdout)
+    runResourceT
+        $  sourceBlocks memCapacity inFile
+        $= lines
+        $$ awaitForever (liftIO . BS.hPut IO.stdout)
