@@ -23,6 +23,23 @@ hGetBufSome handle ptr count = do
                  IO.hGetBufSome handle p count
     return $! BSI.PS ptr 0 bytesRead -- <- Unsafe
 
+-- | Similar to @sourceBlocks@ except that this can operate on an existing
+-- handle.
+sourceBlocksHandle
+    :: MonadResource m
+    => Int
+    -> IO.Handle
+    -> Producer m BS.ByteString
+sourceBlocksHandle bsize h =
+    -- Allocate the block and ensure it is freed after we are done.
+    bracketP (BSI.mallocByteString bsize) finalizeForeignPtr $ \ptr ->
+    loop ptr
+  where
+    loop ptr = do
+        bs <- liftIO $ hGetBufSome h ptr bsize
+        unless (BS.null bs) $
+            yield bs >> loop ptr
+
 -- | Stream the contents of the given file as binary data. Use the given block
 -- size.
 --
@@ -38,14 +55,9 @@ sourceBlocks
 sourceBlocks bsize fp =
     -- Open the file and allocate the block. Ensure they're both freed once
     -- we're done here.
-    bracketP (IO.openBinaryFile fp IO.ReadMode) IO.hClose $ \h ->
-    bracketP (BSI.mallocByteString bsize) finalizeForeignPtr $ \ptr ->
-    loop h ptr
-  where
-    loop h ptr = do
-        bs <- liftIO $ hGetBufSome h ptr bsize
-        unless (BS.null bs) $
-            yield bs >> loop h ptr
+    -- Open the file and ensure it is closed after we are done.
+    bracketP (IO.openBinaryFile fp IO.ReadMode) IO.hClose $
+    sourceBlocksHandle bsize
 
 -- | Split incoming chunks of @ByteString@s on line breaks.
 -- Empty strings will be discarded.
