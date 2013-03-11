@@ -27,8 +27,8 @@ hGetBufSome handle ptr count = do
 -- handle.
 sourceBlocksHandle
     :: MonadResource m
-    => Int
-    -> IO.Handle
+    => Int          -- ^ Size of the buffer used to read blocks
+    -> IO.Handle    -- ^ File Handle
     -> Producer m BS.ByteString
 sourceBlocksHandle bsize h =
     -- Allocate the block and ensure it is freed after we are done.
@@ -39,6 +39,10 @@ sourceBlocksHandle bsize h =
         bs <- liftIO $ hGetBufSome h ptr bsize
         unless (BS.null bs) $
             yield bs >> loop ptr
+
+-- | A Conduit that takes incoming lists and yields all their elements.
+splat :: Monad m => Conduit [a] m a
+splat = awaitForever $ mapM_ yield
 
 -- | Stream the contents of the given file as binary data. Use the given block
 -- size.
@@ -77,6 +81,39 @@ writeLines fp = bracketP (IO.openBinaryFile fp IO.WriteMode) IO.hClose
 recordSize :: Int
 recordSize = 9
 
+-- | Version of @sortedRunSource@ that accepts an open handle.
+sortedRunSourceHandle
+    :: MonadResource m
+    => IO.Handle   -- ^ Handle to the file
+    -> Int         -- ^ Position at which the run starts
+    -> Int         -- ^ Number of records in the run
+    -> Int         -- ^ Size of the buffer used to read the data
+    -> Source m BS.ByteString
+sortedRunSourceHandle h start runLength bufSize = do
+    liftIO $ IO.hSeek h IO.AbsoluteSeek (fromIntegral start)
+    sourceBlocksHandle realBufSize h
+        $= splitLines
+        $= splat
+        $= CL.isolate runLength
+  where
+    -- Change buffer size to the closest multiple of the recordSize that is
+    -- less than the original buffer size.
+    realBufSize = (bufSize `quot` recordSize) * recordSize
+
+-- | @sortedRunSourceHandle fp start runLen bufSize@ iterates through the
+-- sorted run of size @runLen@ in the file @fp@ starting at offset @start@. A
+-- buffer of size @bufSize@ is used to read the data.
+sortedRunSource
+    :: MonadResource m
+    => FilePath    -- ^ Path to the file
+    -> Int         -- ^ Position at which the run starts
+    -> Int         -- ^ Number of records in the run
+    -> Int         -- ^ Size of the buffer used to read the data
+    -> Source m BS.ByteString
+sortedRunSource fp start runLen bsize =
+    bracketP (IO.openBinaryFile fp IO.ReadMode) IO.hClose $ \h ->
+    sortedRunSourceHandle h start runLen bsize
+
 -- | @makeRuns input output length@ makes runs of length @length@ in @output@.
 --
 -- @length@ specifies the number of records, not the number of bytes.
@@ -99,5 +136,6 @@ main = do
     let inFile:outFile:rest = args
         memCapacity         = read (head rest) :: Int
         k                   = read (last rest) :: Int
+        runLength           = memCapacity `quot` recordSize
 
-    makeRuns inFile outFile (memCapacity `quot` recordSize)
+    makeRuns inFile outFile runLength
