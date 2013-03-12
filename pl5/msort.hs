@@ -1,19 +1,26 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections       #-}
 module Main (main) where
 
+import           Control.Applicative       ((<$>))
 import           Control.Monad
-import           Control.Monad.IO.Class   (liftIO)
-import qualified Data.ByteString          as BS
-import qualified Data.ByteString.Internal as BSI
+import           Control.Monad.IO.Class    (liftIO)
+import           Control.Monad.Trans.Class (lift)
+import qualified Data.ByteString           as BS
+import qualified Data.ByteString.Internal  as BSI
 import           Data.Conduit
-import qualified Data.Conduit.List        as CL
-import           Data.List                (sort)
-import           Data.Word                (Word8)
-import           Foreign.ForeignPtr       (ForeignPtr, finalizeForeignPtr,
-                                           withForeignPtr)
-import           Prelude                  hiding (lines)
-import           System.Environment       (getArgs, getProgName)
-import           System.Exit              (exitFailure)
-import qualified System.IO                as IO
+import qualified Data.Conduit.List         as CL
+import           Data.Function             (on)
+import qualified Data.List                 as List
+import           Data.Maybe                (fromJust, isNothing)
+import qualified Data.Vector               as V
+import           Data.Word                 (Word8)
+import           Foreign.ForeignPtr        (ForeignPtr, finalizeForeignPtr,
+                                            withForeignPtr)
+import           Prelude                   hiding (lines)
+import           System.Environment        (getArgs, getProgName)
+import           System.Exit               (exitFailure)
+import qualified System.IO                 as IO
 
 ------------------------------------------------------------------------------
 -- I/O
@@ -110,8 +117,8 @@ recordSize = 9
 -- @length@ specifies the number of records, not the number of bytes.
 makeRuns :: FilePath -> FilePath -> Int -> IO ()
 makeRuns inFile outFile runLength = runResourceT $
-    sourceFile blockSize inFile   $=
-    lines $= CL.map sort $= splat $$
+    sourceFile blockSize inFile $=
+    lines $= CL.map List.sort   $= splat $$
     bracketP openFile IO.hClose (CL.mapM_ . puts)
   where
     -- Number of bytes consumed by @runLength@ records.
@@ -121,10 +128,48 @@ makeRuns inFile outFile runLength = runResourceT $
     puts h s = liftIO $ BS.hPut h s >> BS.hPut h newline
     newline = BS.singleton 0x0a
 
--- @mergeRuns f runLen bufSize runs@ merges runs starting at the given
--- positions into the given file.
-mergeRuns :: FilePath -> Int -> Int -> [Int] -> IO ()
-mergeRuns fp runLen bsize pos = undefined -- TODO
+-- @mergeRuns fin fout runLen bufSize runs@ merges runs starting at the given
+-- positions in @fin@ into @fout@.
+mergeRuns
+    :: forall m. MonadResource m
+    => FilePath
+    -> Int
+    -> Int
+    -> [Int]
+    -> Source m BS.ByteString
+mergeRuns fin runLen bsize pos =
+    bracketP (IO.openBinaryFile fin IO.ReadMode) IO.hClose $ \h -> do
+    let srcs = map (\p -> sourceSortedRun h p runLen bsize) pos
+    (srcs, vals) <- lift $ unzip <$> mapM ($$+ CL.head) srcs
+    loop (V.fromList $ zip3 ([0..] :: [Int]) (map Just srcs) vals)
+  where
+    cmp Nothing Nothing   = EQ
+    cmp Nothing _         = GT
+    cmp _       Nothing   = LT
+    cmp (Just a) (Just b) = a `compare` b
+
+    thrd (_, _, a) = a
+
+    loop
+        :: V.Vector (Int, Maybe (ResumableSource m BS.ByteString),
+                     Maybe BS.ByteString)
+        -> Source m BS.ByteString
+    loop l = do
+        closedSources <- filter (/= -1) . V.toList <$> V.mapM closeExpired l
+        let (idx, src, val) = V.minimumBy (cmp `on` thrd) l
+        unless (isNothing val) $ do
+            yield (fromJust val)
+            (newsrc, newval) <- lift (fromJust src $$++ CL.head)
+            let updates = map (\i -> (i, (i, Nothing, Nothing))) closedSources
+                newl = l V.// ((idx, (idx, Just newsrc, newval)):updates)
+            loop newl
+
+    -- Close expired resumable streams. Output @Nothing@ if a stream was
+    -- closed, or the stream otherwise.
+    closeExpired (i, Just r, Nothing) = lift (r $$+- CL.sinkNull)
+                                     >> return i
+    closeExpired _ = return (-1)
+
 -- Algorithm:
 --      buf[i] = run[i].next for all i
 --      do
