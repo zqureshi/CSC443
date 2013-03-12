@@ -22,6 +22,7 @@ import           Prelude                      hiding (lines)
 import           System.Environment           (getArgs, getProgName)
 import           System.Exit                  (exitFailure)
 import qualified System.IO                    as IO
+import Text.Printf (printf)
 
 ------------------------------------------------------------------------------
 -- Monads
@@ -118,16 +119,6 @@ sourceSortedRun h start runLength bufSize = do
     -- less than the original buffer size.
     realBufSize = (bufSize `quot` recordSize) * recordSize
 
--- | A conduit that writes lists of ByteStrings separated by newlines to the
--- given file and outputs the offsets in the file at which each block was
--- written.
-fileWriteBlock
-    :: MonadResource m
-    => FilePath
-    -> Conduit [BS.ByteString] m Integer
-fileWriteBlock fp =
-    bracketP (IO.openBinaryFile fp IO.WriteMode) IO.hClose handleWriteBlock
-
 -- | A sink that will write the incoming ByteStrings to the given file
 -- separated by new lines and output the number of lines written.
 sinkFileCounter :: MonadResource m => FilePath -> Sink BS.ByteString m Int
@@ -144,20 +135,6 @@ sinkFileCounter fp =
         case ms of
             Nothing -> return ()
             Just s  -> addCounter >> putLn h s >> loop h
-
--- | Version of @fileWriteBlock@ that writes to an existing Handle.
-handleWriteBlock
-    :: MonadIO m
-    => IO.Handle
-    -> Conduit [BS.ByteString] m Integer
-handleWriteBlock h = awaitForever $ \bs -> do
-    pos <- liftIO $ IO.hTell h
-    mapM_ putLn bs
-    yield pos
-  where
-    newline = BS.singleton 0x0a
-    putLn s = liftIO $ BS.hPut h s >> BS.hPut h newline
-
 
 -- | Group @n@ elements from upstream and send the list downstream.
 group :: Monad m => Int -> Conduit a m [a]
@@ -190,15 +167,17 @@ recordSize = 9
 -- @length@ specifies the number of records, not the number of bytes.
 --
 -- This is pass 0 of the external merge sort algorithm.
+--
+-- The total number of records written is returned
 makeRuns
-    :: MonadResource m
-    => FilePath     -- ^ Path to the file containing the unsorted data
+    :: FilePath     -- ^ Path to the file containing the unsorted data
     -> FilePath     -- ^ Target file to which sorted runs will be written
     -> Int          -- ^ Number of records in each sorted run
-    -> Source m Integer
-makeRuns inFile outFile runLength = sourceFile blockSize inFile
-                                 $= lines $= CL.map List.sort
-                                 $= fileWriteBlock outFile
+    -> IO Int
+makeRuns inFile outFile runLength =
+    runResourceT $  sourceFile blockSize inFile
+                 $= lines $= CL.map List.sort
+                 $= splat $$ sinkFileCounter outFile
   -- Number of bytes consumed by @runLength@ records.
   where blockSize = runLength * recordSize
 
@@ -263,11 +242,28 @@ main = do
         k                   = read (last rest) :: Int
         runLength           = memCapacity `quot` recordSize
 
-    runPositions <- runResourceT $
-        makeRuns inFile outFile runLength $$ CL.consume
-    -- Now have @length runPositions@ runs -- each is @runLength@-sorted.
+        -- Actual block size. This will be different from memCapacity if the
+        -- value was nota aligned to the record size.
+        blockSize = runLength * recordSize
 
-    let bufSize = memCapacity `quot` k
+        -- Divide the available memory into k parts. Use only memory that can
+        -- use full records.
+        bufSize = ((memCapacity `quot` k) `quot` recordSize) * recordSize
+
+    unless (bufSize > 0) $ do
+        putStrLn $ printf "Not enough memory to perform %d-way merge." k
+        putStrLn $ printf "Need at least %d bytes." (k * recordSize)
+        exitFailure
+
+    putStrLn $ printf "Using a run length of %d records." runLength
+    totalRecords <- makeRuns inFile outFile runLength
+    putStrLn $ printf "Run 0 done. %d records written." totalRecords
+
+    let totalSize = fromIntegral $ totalRecords * recordSize
+        runPositions = [0, fromIntegral blockSize .. totalSize-1] :: [Integer]
+
+    putStrLn $ printf "Performing %d-way merge with a buffer size of %d."
+                      k bufSize
 
     runResourceT $ do
         (key, h) <- Res.allocate (IO.openBinaryFile "tmp.txt" IO.WriteMode)
