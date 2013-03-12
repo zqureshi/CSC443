@@ -4,6 +4,7 @@ module Main (main) where
 import           Control.Arrow                (first)
 import           Control.Monad
 import           Control.Monad.IO.Class       (MonadIO (liftIO))
+import           Control.Monad.State          (StateT, execStateT, modify)
 import           Control.Monad.Trans.Class    (lift)
 import           Control.Monad.Trans.Resource as Res
 import qualified Data.ByteString              as BS
@@ -21,6 +22,19 @@ import           Prelude                      hiding (lines)
 import           System.Environment           (getArgs, getProgName)
 import           System.Exit                  (exitFailure)
 import qualified System.IO                    as IO
+
+------------------------------------------------------------------------------
+-- Monads
+------------------------------------------------------------------------------
+
+-- A simple wrapper around the StateT monad to keep count of something.
+type CounterT m = StateT Int m
+
+runCounterT :: Monad m => CounterT m () -> m Int
+runCounterT c = execStateT c 0
+
+addCounter :: Monad m => CounterT m ()
+addCounter = modify (+ 1)
 
 ------------------------------------------------------------------------------
 -- I/O
@@ -114,6 +128,23 @@ fileWriteBlock
 fileWriteBlock fp =
     bracketP (IO.openBinaryFile fp IO.WriteMode) IO.hClose handleWriteBlock
 
+-- | A sink that will write the incoming ByteStrings to the given file
+-- separated by new lines and output the number of lines written.
+sinkFileCounter :: MonadResource m => FilePath -> Sink BS.ByteString m Int
+sinkFileCounter fp =
+    bracketP openFile IO.hClose $ \h ->
+    runCounterT (loop h)
+  where
+    openFile = IO.openBinaryFile fp IO.WriteMode
+    newline = BS.singleton 0x0a
+    putLn h s = liftIO $ BS.hPut h s >> BS.hPut h newline
+
+    loop h = do
+        ms <- lift await
+        case ms of
+            Nothing -> return ()
+            Just s  -> addCounter >> putLn h s >> loop h
+
 -- | Version of @fileWriteBlock@ that writes to an existing Handle.
 handleWriteBlock
     :: MonadIO m
@@ -153,6 +184,7 @@ imin cmpr vec = V.ifoldr' cmp' (0, vec V.! 0) vec
 -- Size of records being sorted in bytes. This includes the new line.
 recordSize :: Int
 recordSize = 9
+
 
 -- | @makeRuns input output length@ makes runs of length @length@ in @output@.
 -- @length@ specifies the number of records, not the number of bytes.
