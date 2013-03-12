@@ -2,9 +2,9 @@
 {-# LANGUAGE TupleSections       #-}
 module Main (main) where
 
-import           Control.Applicative       ((<$>))
+import           Control.Arrow             (first)
 import           Control.Monad
-import           Control.Monad.IO.Class    (liftIO)
+import           Control.Monad.IO.Class    (MonadIO (liftIO))
 import           Control.Monad.Trans.Class (lift)
 import qualified Data.ByteString           as BS
 import qualified Data.ByteString.Internal  as BSI
@@ -104,6 +104,40 @@ sourceSortedRun h start runLength bufSize = do
     -- less than the original buffer size.
     realBufSize = (bufSize `quot` recordSize) * recordSize
 
+-- | A conduit that writes lists of ByteStrings separated by newlines to the
+-- given file and outputs the offsets in the file at which each block was
+-- written.
+fileWriteBlock
+    :: MonadResource m
+    => FilePath
+    -> Conduit [BS.ByteString] m Integer
+fileWriteBlock fp =
+    bracketP (IO.openBinaryFile fp IO.WriteMode) IO.hClose handleWriteBlock
+
+-- | Version of @fileWriteBlock@ that writes to an existing Handle.
+handleWriteBlock
+    :: MonadIO m
+    => IO.Handle
+    -> Conduit [BS.ByteString] m Integer
+handleWriteBlock h = awaitForever $ \bs -> do
+    pos <- liftIO $ IO.hTell h
+    mapM_ putLn bs
+    yield pos
+  where
+    newline = BS.singleton 0x0a
+    putLn s = liftIO $ BS.hPut h s >> BS.hPut h newline
+
+
+------------------------------------------------------------------------------
+-- Utilities
+------------------------------------------------------------------------------
+
+-- Return the minimum value and its index.
+imin :: (a -> a -> Ordering) -> V.Vector a -> (Int, a)
+imin cmpr vec = V.ifoldr' cmp' (0, vec V.! 0) vec
+    where cmp' ai a (bi, b) = case a `cmpr` b of
+                                LT -> (ai, a)
+                                _  -> (bi, b)
 
 ------------------------------------------------------------------------------
 -- msort
@@ -115,33 +149,29 @@ recordSize = 9
 
 -- | @makeRuns input output length@ makes runs of length @length@ in @output@.
 -- @length@ specifies the number of records, not the number of bytes.
+--
+-- This is pass 0 of the external merge sort algorithm.
 makeRuns
     :: forall m. MonadResource m
     => FilePath
     -> FilePath
     -> Int
     -> Source m Integer
-makeRuns inFile outFile runLength =
-    sourceFile blockSize inFile $=
-    lines $= CL.map List.sort   $=
-    bracketP openFile IO.hClose writeRun
-  where
-    -- Number of bytes consumed by @runLength@ records.
-    blockSize = runLength * recordSize
-    openFile = IO.openBinaryFile outFile IO.WriteMode
+makeRuns inFile outFile runLength = sourceFile blockSize inFile
+                                 $= lines $= CL.map List.sort
+                                 $= fileWriteBlock outFile
+  -- Number of bytes consumed by @runLength@ records.
+  where blockSize = runLength * recordSize
 
-    -- Write the given bytestring to the handle and add a newline.
-    puts h s = liftIO $ BS.hPut h s >> BS.hPut h newline
-    newline = BS.singleton 0x0a
-
-    writeRun :: IO.Handle -> Conduit [BS.ByteString] m Integer
-    writeRun h = awaitForever $ \run -> do
-        pos <- liftIO $ IO.hTell h
-        mapM_ (puts h) run
-        yield pos
-
--- @mergeRuns fin fout runLen bufSize runs@ merges runs starting at the given
--- positions in @fin@ into @fout@.
+-- @mergeRuns fin runLen bufSize runs@ merges runs starting at the given
+-- positions in @fin@ and writes them upstream.
+--
+-- For each run, a buffer of size @bufSize@ will be used to go through it.
+--
+-- This is essentially a k-way merge where k is the number of positions
+-- provided. The file should be @runLen@-sorted.
+--
+-- The output will be (runLen * k)-sorted.
 mergeRuns
     :: forall m. MonadResource m
     => FilePath
@@ -149,46 +179,36 @@ mergeRuns
     -> Int
     -> [Integer]
     -> Source m BS.ByteString
-mergeRuns fin runLen bsize pos =
+mergeRuns fin runLen bsize positions =
     bracketP (IO.openBinaryFile fin IO.ReadMode) IO.hClose $ \h -> do
-    let srcs = map (\p -> sourceSortedRun h p runLen bsize) pos
-    (srcs', vals) <- lift $ unzip <$> mapM ($$+ CL.head) srcs
-    loop (V.fromList $ zip3 ([0..] :: [Int]) (map Just srcs') vals)
+    let sources = map (runIterator h) positions
+    sourcesAndValues <- lift $! mapM ($$+ CL.head) sources
+    loop (V.fromList $ map (first Just) sourcesAndValues)
   where
+    -- Source that yields elements of the given run.
+    runIterator h pos = sourceSortedRun h pos runLen bsize
+
     cmp Nothing Nothing   = EQ
     cmp Nothing _         = GT
     cmp _       Nothing   = LT
     cmp (Just a) (Just b) = a `compare` b
 
-    thrd (_, _, a) = a
-
-    loop
-        :: V.Vector (Int, Maybe (ResumableSource m BS.ByteString),
-                     Maybe BS.ByteString)
-        -> Source m BS.ByteString
     loop l = do
-        closedSources <- filter (/= -1) . V.toList <$> V.mapM closeExpired l
-        let (idx, src, val) = V.minimumBy (cmp `on` thrd) l
+        closedSources <- V.foldM' closeExpired [] (V.indexed l)
+        let (idx, (src, val)) = imin (cmp `on` snd) l
         unless (isNothing val) $ do
             yield (fromJust val)
-            (newsrc, newval) <- lift (fromJust src $$++ CL.head)
-            let updates = map (\i -> (i, (i, Nothing, Nothing))) closedSources
-                newl = l V.// ((idx, (idx, Just newsrc, newval)):updates)
-            loop newl
+            (newsrc, newval) <- lift $! fromJust src $$++ CL.head
+            let updates = (idx, (Just newsrc, newval)):
+                          map (, (Nothing, Nothing)) closedSources
+            loop $! l V.// updates
 
-    -- Close expired resumable streams. Output @Nothing@ if a stream was
-    -- closed, or the stream otherwise.
-    closeExpired (i, Just r, Nothing) = lift (r $$+- CL.sinkNull)
-                                     >> return i
-    closeExpired _ = return (-1)
+    -- Close expired resumable streams and accumulate a list of indexes of
+    -- those streams.
+    closeExpired l (i, (Just r, Nothing)) = lift (r $$+- CL.sinkNull)
+                                         >> return (i:l)
+    closeExpired l _ = return l
 
--- Algorithm:
---      buf[i] = run[i].next for all i
---      do
---          min, i = min(buf)
---          yield min
---          buf[i] = run[i].next
---      until (buf[i] = Nothing for all i)
 
 main :: IO ()
 main = do
@@ -205,9 +225,9 @@ main = do
         k                   = read (last rest) :: Int
         runLength           = memCapacity `quot` recordSize
 
-    runPositions <- runResourceT $ 
+    runPositions <- runResourceT $
         makeRuns inFile outFile runLength $$ CL.consume
-    
+
     let bufSize = memCapacity `quot` k
 
     runResourceT $
