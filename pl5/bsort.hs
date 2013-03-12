@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
+import           Control.Applicative      ((<$>))
 import           Control.Monad
 import           Control.Monad.IO.Class   (MonadIO (liftIO))
 import qualified Data.ByteString          as BS
@@ -8,6 +9,7 @@ import qualified Data.ByteString.Internal as BSI
 import           Data.Conduit
 import qualified Data.Conduit.List        as CL
 import           Data.Default             (def)
+import           Data.Time.Clock.POSIX    (getPOSIXTime)
 import           Data.Word                (Word8)
 import qualified Database.LevelDB         as LDB
 import           Foreign.ForeignPtr       (ForeignPtr, finalizeForeignPtr,
@@ -16,6 +18,7 @@ import           Prelude                  hiding (lines)
 import           System.Environment       (getArgs, getProgName)
 import           System.Exit              (exitFailure)
 import qualified System.IO                as IO
+import           Text.Printf              (printf)
 
 ------------------------------------------------------------------------------
 -- I/O
@@ -78,6 +81,10 @@ levelDBIndexSink db = awaitForever $ \bs -> LDB.put db def bs ""
 splat :: Monad m => Conduit [a] m a
 splat = awaitForever $ mapM_ yield
 
+-- | Get the current system time in milliseconds.
+now :: IO Int
+now = truncate . (* 1000) <$> getPOSIXTime
+
 recordSize :: Int
 recordSize = 9
 
@@ -96,6 +103,8 @@ main = do
                   then read (args !! 2) * recordSize
                   else 500 * recordSize
 
+    startTime <- now
+
     runResourceT $ do
         db <- LDB.open outIndex
                        (LDB.defaultOptions { LDB.createIfMissing = True
@@ -103,3 +112,7 @@ main = do
         sourceFile bufSize inputFile
             $= lines $= splat
             $$ levelDBIndexSink db
+
+    endTime <- now
+
+    putStrLn $ printf "TIME: %d milliseconds" (endTime - startTime)

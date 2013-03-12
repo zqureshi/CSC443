@@ -1,5 +1,5 @@
 TARGETS = mkunsorted msort bsort
-GHCOPTS = ""
+GHCOPTS = 
 
 .PHONY: all clean
 
