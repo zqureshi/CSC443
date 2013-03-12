@@ -1,23 +1,23 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
-import Data.Maybe (isJust, fromJust)
-import Control.Monad.Trans.Resource (release)
-import Data.Default (def)
-import qualified Database.LevelDB as LDB
 import           Control.Monad
-import           Control.Monad.IO.Class   (MonadIO (liftIO))
-import qualified Data.ByteString          as BS
-import qualified Data.ByteString.Internal as BSI
+import           Control.Monad.IO.Class       (MonadIO (liftIO))
+import           Control.Monad.Trans.Resource (release)
+import qualified Data.ByteString              as BS
+import qualified Data.ByteString.Internal     as BSI
 import           Data.Conduit
-import qualified Data.Conduit.List        as CL
-import           Data.Word                (Word8)
-import           Foreign.ForeignPtr       (ForeignPtr, finalizeForeignPtr,
-                                           withForeignPtr)
-import           Prelude                  hiding (lines)
-import           System.Environment       (getArgs, getProgName)
-import           System.Exit              (exitFailure)
-import qualified System.IO                as IO
+import qualified Data.Conduit.List            as CL
+import           Data.Default                 (def)
+import           Data.Maybe                   (fromJust, isJust)
+import           Data.Word                    (Word8)
+import qualified Database.LevelDB             as LDB
+import           Foreign.ForeignPtr           (ForeignPtr, finalizeForeignPtr,
+                                               withForeignPtr)
+import           Prelude                      hiding (lines)
+import           System.Environment           (getArgs, getProgName)
+import           System.Exit                  (exitFailure)
+import qualified System.IO                    as IO
 
 ------------------------------------------------------------------------------
 -- I/O
@@ -118,11 +118,14 @@ main = do
 
 
     runResourceT $ do
-        db <- LDB.open outIndex 
+        db <- LDB.open outIndex
                        (LDB.defaultOptions { LDB.createIfMissing = True
                                            , LDB.errorIfExists   = True })
         sourceFile bufSize inputFile
             $= lines $= splat
             $$ levelDBIndexSink db
 
-        levelDBKeySource db $$ awaitForever (liftIO . BS.putStrLn)
+        levelDBKeySource db $$ awaitForever (putLn IO.stdout)
+  where
+    newline = BS.singleton 0x0a
+    putLn h s = liftIO $ BS.hPut h s >> BS.hPut h newline
