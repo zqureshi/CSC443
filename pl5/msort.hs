@@ -1,26 +1,26 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE TupleSections #-}
 module Main (main) where
 
-import           Control.Arrow             (first)
+import           Control.Arrow                (first)
 import           Control.Monad
-import           Control.Monad.IO.Class    (MonadIO (liftIO))
-import           Control.Monad.Trans.Class (lift)
-import qualified Data.ByteString           as BS
-import qualified Data.ByteString.Internal  as BSI
+import           Control.Monad.IO.Class       (MonadIO (liftIO))
+import           Control.Monad.Trans.Class    (lift)
+import           Control.Monad.Trans.Resource as Res
+import qualified Data.ByteString              as BS
+import qualified Data.ByteString.Internal     as BSI
 import           Data.Conduit
-import qualified Data.Conduit.List         as CL
-import           Data.Function             (on)
-import qualified Data.List                 as List
-import           Data.Maybe                (fromJust, isNothing)
-import qualified Data.Vector               as V
-import           Data.Word                 (Word8)
-import           Foreign.ForeignPtr        (ForeignPtr, finalizeForeignPtr,
-                                            withForeignPtr)
-import           Prelude                   hiding (lines)
-import           System.Environment        (getArgs, getProgName)
-import           System.Exit               (exitFailure)
-import qualified System.IO                 as IO
+import qualified Data.Conduit.List            as CL
+import           Data.Function                (on)
+import qualified Data.List                    as List
+import           Data.Maybe                   (fromJust, isNothing)
+import qualified Data.Vector                  as V
+import           Data.Word                    (Word8)
+import           Foreign.ForeignPtr           (ForeignPtr, finalizeForeignPtr,
+                                               withForeignPtr)
+import           Prelude                      hiding (lines)
+import           System.Environment           (getArgs, getProgName)
+import           System.Exit                  (exitFailure)
+import qualified System.IO                    as IO
 
 ------------------------------------------------------------------------------
 -- I/O
@@ -128,6 +128,13 @@ handleWriteBlock h = awaitForever $ \bs -> do
     putLn s = liftIO $ BS.hPut h s >> BS.hPut h newline
 
 
+-- | Group @n@ elements from upstream and send the list downstream.
+group :: Monad m => Int -> Conduit a m [a]
+group n = loop
+    where loop = do l <- CL.take n
+                    unless (null l) $ yield l >> loop
+
+
 ------------------------------------------------------------------------------
 -- Utilities
 ------------------------------------------------------------------------------
@@ -152,10 +159,10 @@ recordSize = 9
 --
 -- This is pass 0 of the external merge sort algorithm.
 makeRuns
-    :: forall m. MonadResource m
-    => FilePath
-    -> FilePath
-    -> Int
+    :: MonadResource m
+    => FilePath     -- ^ Path to the file containing the unsorted data
+    -> FilePath     -- ^ Target file to which sorted runs will be written
+    -> Int          -- ^ Number of records in each sorted run
     -> Source m Integer
 makeRuns inFile outFile runLength = sourceFile blockSize inFile
                                  $= lines $= CL.map List.sort
@@ -163,21 +170,20 @@ makeRuns inFile outFile runLength = sourceFile blockSize inFile
   -- Number of bytes consumed by @runLength@ records.
   where blockSize = runLength * recordSize
 
--- @mergeRuns fin runLen bufSize runs@ merges runs starting at the given
--- positions in @fin@ and writes them upstream.
+-- @mergeRuns fin runLength bufSize positions@ merges K runs (where K is the
+-- length of @positions@) of @runLength@ records each using a @bufSize@ byte
+-- buffer.
 --
--- For each run, a buffer of size @bufSize@ will be used to go through it.
+-- The file is assumed to be @runLen@-sorted. The output will be @runLen * K@
+-- sorted.
 --
--- This is essentially a k-way merge where k is the number of positions
--- provided. The file should be @runLen@-sorted.
---
--- The output will be (runLen * k)-sorted.
+-- Total memory used by buffers will be @K * bufSize@.
 mergeRuns
-    :: forall m. MonadResource m
-    => FilePath
-    -> Int
-    -> Int
-    -> [Integer]
+    :: MonadResource m
+    => FilePath     -- ^ Path to the file containing the sorted runs
+    -> Int          -- ^ Number of records in each sorted run
+    -> Int          -- ^ Buffer size to use to read from each sorted run
+    -> [Integer]    -- ^ List of starting positions of each run
     -> Source m BS.ByteString
 mergeRuns fin runLen bsize positions =
     bracketP (IO.openBinaryFile fin IO.ReadMode) IO.hClose $ \h -> do
@@ -227,13 +233,18 @@ main = do
 
     runPositions <- runResourceT $
         makeRuns inFile outFile runLength $$ CL.consume
+    -- Now have @length runPositions@ runs -- each is @runLength@-sorted.
 
     let bufSize = memCapacity `quot` k
 
-    runResourceT $
-        mergeRuns outFile runLength bufSize (take k runPositions) $$
-        bracketP (IO.openBinaryFile "tmp.txt" IO.WriteMode)
-                  IO.hClose sinkHandle
+    runGroups <- CL.sourceList runPositions $$ group k =$ CL.consume
+
+    runResourceT $ do
+        (key, h) <- Res.allocate (IO.openBinaryFile "tmp.txt" IO.WriteMode)
+                                  IO.hClose
+        CL.sourceList runGroups $$ awaitForever $ \pos ->
+            mergeRuns outFile runLength bufSize pos $$ sinkHandle h
+        release key
 
 sinkHandle :: MonadResource m => IO.Handle -> Sink BS.ByteString m ()
 sinkHandle h = CL.mapM_ puts
