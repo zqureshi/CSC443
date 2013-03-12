@@ -1,6 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 module Main (main) where
 
+import           Control.Applicative          ((<$>))
 import           Control.Arrow                (first)
 import           Control.Monad
 import           Control.Monad.IO.Class       (MonadIO (liftIO))
@@ -14,6 +15,7 @@ import qualified Data.Conduit.List            as CL
 import           Data.Function                (on)
 import qualified Data.List                    as List
 import           Data.Maybe                   (fromJust, isNothing)
+import           Data.Time.Clock.POSIX        (getPOSIXTime)
 import qualified Data.Vector                  as V
 import           Data.Word                    (Word8)
 import           Foreign.ForeignPtr           (ForeignPtr, finalizeForeignPtr,
@@ -22,7 +24,7 @@ import           Prelude                      hiding (lines)
 import           System.Environment           (getArgs, getProgName)
 import           System.Exit                  (exitFailure)
 import qualified System.IO                    as IO
-import Text.Printf (printf)
+import           Text.Printf                  (printf)
 
 ------------------------------------------------------------------------------
 -- Monads
@@ -147,6 +149,10 @@ group n = loop
 -- Utilities
 ------------------------------------------------------------------------------
 
+-- | Get the current system time in milliseconds.
+now :: IO Int
+now = truncate . (* 1000) <$> getPOSIXTime
+
 -- Return the minimum value and its index.
 imin :: (a -> a -> Ordering) -> V.Vector a -> (Int, a)
 imin cmpr vec = V.ifoldr' cmp' (0, vec V.! 0) vec
@@ -256,6 +262,8 @@ main = do
         exitFailure
 
     putStrLn $ printf "Using a run length of %d records." runLength
+
+    startTime <- now
     totalRecords <- makeRuns inFile outFile runLength
     putStrLn $ printf "Run 0 done. %d records written." totalRecords
 
@@ -271,6 +279,9 @@ main = do
         CL.sourceList runPositions $= group k $$ awaitForever $ \pos ->
             mergeRuns outFile runLength bufSize pos $$ sinkHandle h
         release key
+
+    endTime <- now
+    putStrLn $ printf "TIME: %d milliseconds" (endTime - startTime)
 
 sinkHandle :: MonadResource m => IO.Handle -> Sink BS.ByteString m ()
 sinkHandle h = CL.mapM_ puts
