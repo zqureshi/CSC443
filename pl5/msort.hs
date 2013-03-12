@@ -237,12 +237,10 @@ main = do
 
     let bufSize = memCapacity `quot` k
 
-    runGroups <- CL.sourceList runPositions $$ group k =$ CL.consume
-
     runResourceT $ do
         (key, h) <- Res.allocate (IO.openBinaryFile "tmp.txt" IO.WriteMode)
                                   IO.hClose
-        CL.sourceList runGroups $$ awaitForever $ \pos ->
+        CL.sourceList runPositions $= group k $$ awaitForever $ \pos ->
             mergeRuns outFile runLength bufSize pos $$ sinkHandle h
         release key
 
