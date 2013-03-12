@@ -105,7 +105,7 @@ main :: IO ()
 main = do
     args <- getArgs
 
-    when (length args <= 2) $ do
+    when (length args < 2) $ do
         progName <- getProgName
         putStrLn $ "USAGE: " ++ progName ++ " <input file> <out index> [count]"
         exitFailure
