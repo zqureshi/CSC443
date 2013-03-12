@@ -89,12 +89,12 @@ lines = CL.map $ filter (not . BS.null) . BS.split 0x0a
 sourceSortedRun
     :: MonadResource m
     => IO.Handle   -- ^ Handle to the file
-    -> Int         -- ^ Position at which the run starts
+    -> Integer     -- ^ Position at which the run starts
     -> Int         -- ^ Number of records in the run
     -> Int         -- ^ Size of the buffer used to read the data
     -> Source m BS.ByteString
 sourceSortedRun h start runLength bufSize = do
-    liftIO $ IO.hSeek h IO.AbsoluteSeek (fromIntegral start)
+    liftIO $ IO.hSeek h IO.AbsoluteSeek start
     sourceFileHandle realBufSize h
         $= lines
         $= splat
@@ -115,18 +115,30 @@ recordSize = 9
 
 -- | @makeRuns input output length@ makes runs of length @length@ in @output@.
 -- @length@ specifies the number of records, not the number of bytes.
-makeRuns :: FilePath -> FilePath -> Int -> IO ()
-makeRuns inFile outFile runLength = runResourceT $
+makeRuns
+    :: forall m. MonadResource m
+    => FilePath
+    -> FilePath
+    -> Int
+    -> Source m Integer
+makeRuns inFile outFile runLength =
     sourceFile blockSize inFile $=
-    lines $= CL.map List.sort   $= splat $$
-    bracketP openFile IO.hClose (CL.mapM_ . puts)
+    lines $= CL.map List.sort   $=
+    bracketP openFile IO.hClose writeRun
   where
     -- Number of bytes consumed by @runLength@ records.
     blockSize = runLength * recordSize
     openFile = IO.openBinaryFile outFile IO.WriteMode
+
     -- Write the given bytestring to the handle and add a newline.
     puts h s = liftIO $ BS.hPut h s >> BS.hPut h newline
     newline = BS.singleton 0x0a
+
+    writeRun :: IO.Handle -> Conduit [BS.ByteString] m Integer
+    writeRun h = awaitForever $ \run -> do
+        pos <- liftIO $ IO.hTell h
+        mapM_ (puts h) run
+        yield pos
 
 -- @mergeRuns fin fout runLen bufSize runs@ merges runs starting at the given
 -- positions in @fin@ into @fout@.
@@ -135,13 +147,13 @@ mergeRuns
     => FilePath
     -> Int
     -> Int
-    -> [Int]
+    -> [Integer]
     -> Source m BS.ByteString
 mergeRuns fin runLen bsize pos =
     bracketP (IO.openBinaryFile fin IO.ReadMode) IO.hClose $ \h -> do
     let srcs = map (\p -> sourceSortedRun h p runLen bsize) pos
-    (srcs, vals) <- lift $ unzip <$> mapM ($$+ CL.head) srcs
-    loop (V.fromList $ zip3 ([0..] :: [Int]) (map Just srcs) vals)
+    (srcs', vals) <- lift $ unzip <$> mapM ($$+ CL.head) srcs
+    loop (V.fromList $ zip3 ([0..] :: [Int]) (map Just srcs') vals)
   where
     cmp Nothing Nothing   = EQ
     cmp Nothing _         = GT
@@ -193,4 +205,18 @@ main = do
         k                   = read (last rest) :: Int
         runLength           = memCapacity `quot` recordSize
 
-    makeRuns inFile outFile runLength
+    runPositions <- runResourceT $ 
+        makeRuns inFile outFile runLength $$ CL.consume
+    
+    let bufSize = memCapacity `quot` k
+
+    runResourceT $
+        mergeRuns outFile runLength bufSize (take k runPositions) $$
+        bracketP (IO.openBinaryFile "tmp.txt" IO.WriteMode)
+                  IO.hClose sinkHandle
+
+sinkHandle :: MonadResource m => IO.Handle -> Sink BS.ByteString m ()
+sinkHandle h = CL.mapM_ puts
+  where
+    puts s  = liftIO $ BS.hPut h s >> BS.hPut h newline
+    newline = BS.singleton 0x0a
