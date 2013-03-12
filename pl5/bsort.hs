@@ -2,22 +2,20 @@
 module Main (main) where
 
 import           Control.Monad
-import           Control.Monad.IO.Class       (MonadIO (liftIO))
-import           Control.Monad.Trans.Resource (release)
-import qualified Data.ByteString              as BS
-import qualified Data.ByteString.Internal     as BSI
+import           Control.Monad.IO.Class   (MonadIO (liftIO))
+import qualified Data.ByteString          as BS
+import qualified Data.ByteString.Internal as BSI
 import           Data.Conduit
-import qualified Data.Conduit.List            as CL
-import           Data.Default                 (def)
-import           Data.Maybe                   (fromJust, isJust)
-import           Data.Word                    (Word8)
-import qualified Database.LevelDB             as LDB
-import           Foreign.ForeignPtr           (ForeignPtr, finalizeForeignPtr,
-                                               withForeignPtr)
-import           Prelude                      hiding (lines)
-import           System.Environment           (getArgs, getProgName)
-import           System.Exit                  (exitFailure)
-import qualified System.IO                    as IO
+import qualified Data.Conduit.List        as CL
+import           Data.Default             (def)
+import           Data.Word                (Word8)
+import qualified Database.LevelDB         as LDB
+import           Foreign.ForeignPtr       (ForeignPtr, finalizeForeignPtr,
+                                           withForeignPtr)
+import           Prelude                  hiding (lines)
+import           System.Environment       (getArgs, getProgName)
+import           System.Exit              (exitFailure)
+import qualified System.IO                as IO
 
 ------------------------------------------------------------------------------
 -- I/O
@@ -76,24 +74,6 @@ levelDBIndexSink
     -> Sink BS.ByteString m ()
 levelDBIndexSink db = awaitForever $ \bs -> LDB.put db def bs ""
 
--- | A source that yields keys from a level DB database.
-levelDBKeySource
-    :: MonadResource m
-    => LDB.DB
-    -> Source m BS.ByteString
-levelDBKeySource db = do
-    (key, iter) <- LDB.iterOpen' db def
-    LDB.iterFirst iter
-    loop iter
-    release key
-  where
-    loop iter = do
-        key <- LDB.iterKey iter
-        when (isJust key) $ do
-            yield (fromJust key)
-            LDB.iterNext iter
-            loop iter
-
 -- | A Conduit that takes incoming lists and yields all their elements.
 splat :: Monad m => Conduit [a] m a
 splat = awaitForever $ mapM_ yield
@@ -116,7 +96,6 @@ main = do
                   then read (args !! 2) * recordSize
                   else 500 * recordSize
 
-
     runResourceT $ do
         db <- LDB.open outIndex
                        (LDB.defaultOptions { LDB.createIfMissing = True
@@ -124,8 +103,3 @@ main = do
         sourceFile bufSize inputFile
             $= lines $= splat
             $$ levelDBIndexSink db
-
-        levelDBKeySource db $$ awaitForever (putLn IO.stdout)
-  where
-    newline = BS.singleton 0x0a
-    putLn h s = liftIO $ BS.hPut h s >> BS.hPut h newline
