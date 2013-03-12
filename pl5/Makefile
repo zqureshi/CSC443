@@ -1,4 +1,4 @@
-TARGETS = mkunsorted msort
+TARGETS = mkunsorted msort bsort
 
 .PHONY: all clean
 

@@ -5,3 +5,5 @@ unsorted.data.txt
 .shelly
 msort
 unsorted.huge.txt
+leveldb-haskell-0.2.0
+bsort

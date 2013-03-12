@@ -1,3 +1,4 @@
 bytestring
 random
 conduit
+leveldb-haskell
