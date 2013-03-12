@@ -1,4 +1,5 @@
 TARGETS = mkunsorted msort bsort
+GHCOPTS = ""
 
 .PHONY: all clean
 
@@ -8,4 +9,4 @@ clean:
 	rm -f $(TARGETS) $(TARGETS:%=%.hi) $(TARGETS:%=%.o)
 
 %: %.hs
-	ghc --make $^
+	ghc $(GHCOPTS) --make $^
