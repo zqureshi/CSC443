@@ -258,7 +258,7 @@ mergeRuns h runLen bsize positions = do
 
     -- Close expired resumable streams and accumulate a list of indexes of
     -- those streams.
-    closeExpired l (i, (Just r, Nothing)) = lift (r $$+- CL.sinkNull)
+    closeExpired l (i, (Just r, Nothing)) = lift (r $$+- return ())
                                          >> return (i:l)
     closeExpired l _ = return l
 
@@ -307,8 +307,9 @@ main = do
                 -> Int
                 -> m (Res.ReleaseKey, FilePath, IO.Handle)
             loop input output n | n >= totalRecords = return input
-                                | otherwise = do
-                let positions = [0, fromIntegral bufSize .. totalSize-1]
+                                     | otherwise = do
+                let blockSize = n * recordSize
+                    positions = [0, fromIntegral blockSize .. totalSize-1]
                     groups = CL.sourceList positions $= group k
 
                 -- k-way merge
