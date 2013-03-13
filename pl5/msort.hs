@@ -110,13 +110,23 @@ sourceSortedRun
     -> Int         -- ^ Number of records in the run
     -> Int         -- ^ Size of the buffer used to read the data
     -> Source m BS.ByteString
-sourceSortedRun h start runLength bufSize = do
-    liftIO $ IO.hSeek h IO.AbsoluteSeek start
-    sourceFileHandle realBufSize h
-        $= lines
-        $= splat
-        $= CL.isolate runLength
+sourceSortedRun h start runLength bufSize =
+    bracketP (BSI.mallocByteString realBufSize) finalizeForeignPtr $ \ptr ->
+    loop ptr start runLength
   where
+    loop _   _   0 = return ()
+    loop ptr pos count = do
+        block <- liftIO $ IO.hSeek h IO.AbsoluteSeek pos
+                       >> hGetBufSome h ptr realBufSize
+
+        unless (BS.null block) $ do
+            newCount <- foldM step count
+                        (filter (not . BS.null) . BS.split 0x0a $ block)
+            loop ptr (pos + fromIntegral realBufSize) newCount
+
+    step 0 _ = return 0
+    step n s = yield s >> return (n-1)
+
     -- Change buffer size to the closest multiple of the recordSize that is
     -- less than the original buffer size.
     realBufSize = (bufSize `quot` recordSize) * recordSize
