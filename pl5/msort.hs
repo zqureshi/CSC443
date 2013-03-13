@@ -45,11 +45,14 @@ addCounter = modify (+ 1)
 -- I/O
 ------------------------------------------------------------------------------
 
--- | Similar to @System.IO.hGetBufSome@. Reads a ByteString into an existing
+-- | Similar to @System.IO.hGetBuf@. Reads a ByteString into an existing
 -- buffer and returns a ByteString referencing that buffer.
-hGetBufSome :: IO.Handle -> ForeignPtr Word8 -> Int -> IO BS.ByteString
-hGetBufSome handle ptr count = do
-    bytesRead <- withForeignPtr ptr $ \p -> IO.hGetBufSome handle p count
+hGetBuf :: IO.Handle -> ForeignPtr Word8 -> Int -> IO BS.ByteString
+hGetBuf handle ptr count = do
+    -- Originally used hGetBufSome here but it caused some weird line break
+    -- bug where when it had to read the last 90 bytes of an 8100 byte file,
+    -- it would read only 86, reading the next 4 in the next iteration.
+    bytesRead <- withForeignPtr ptr $ \p -> IO.hGetBuf handle p count
     return $! BSI.PS ptr 0 bytesRead
 
 ------------------------------------------------------------------------------
@@ -74,7 +77,7 @@ sourceFileHandle bsize h =
     loop ptr
   where
     loop ptr = do
-        bs <- liftIO $ hGetBufSome h ptr bsize
+        bs <- liftIO $ hGetBuf h ptr bsize
         unless (BS.null bs) $
             yield bs >> loop ptr
 
@@ -110,7 +113,7 @@ sourceSortedRun h start runLength bufSize =
     loop _   _   0 = return ()
     loop ptr pos count = do
         block <- liftIO $ IO.hSeek h IO.AbsoluteSeek pos
-                       >> hGetBufSome h ptr realBufSize
+                       >> hGetBuf h ptr realBufSize
 
         unless (BS.null block) $ do
             let records = lines block
@@ -307,13 +310,13 @@ main = do
                 -> Int
                 -> m (Res.ReleaseKey, FilePath, IO.Handle)
             loop input output n | n >= totalRecords = return input
-                                     | otherwise = do
+                                | otherwise = do
                 let blockSize = n * recordSize
                     positions = [0, fromIntegral blockSize .. totalSize-1]
                     groups = CL.sourceList positions $= group k
 
                 -- k-way merge
-                groups $$ awaitForever $ \pos ->
+                groups $$ CL.mapM_ $ \pos ->
                   void $  mergeRuns (thrd input) n bufSize pos
                        $$ sinkHandleCounter (thrd output)
 
