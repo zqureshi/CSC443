@@ -7,3 +7,4 @@ msort
 unsorted.huge.txt
 leveldb-haskell-0.2.0
 bsort
+unsorted.small.txt
