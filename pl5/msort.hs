@@ -121,22 +121,27 @@ sourceSortedRun h start runLength bufSize = do
     -- less than the original buffer size.
     realBufSize = (bufSize `quot` recordSize) * recordSize
 
--- | A sink that will write the incoming ByteStrings to the given file
--- separated by new lines and output the number of lines written.
-sinkFileCounter :: MonadResource m => FilePath -> Sink BS.ByteString m Int
-sinkFileCounter fp =
-    bracketP openFile IO.hClose $ \h ->
-    runCounterT (loop h)
-  where
-    openFile = IO.openBinaryFile fp IO.WriteMode
-    newline = BS.singleton 0x0a
-    putLn h s = liftIO $ BS.hPut h s >> BS.hPut h newline
 
-    loop h = do
+-- | Version of @sinkFileCounter@ that works on existing handles.
+sinkHandleCounter :: MonadIO m => IO.Handle -> Sink BS.ByteString m Int
+sinkHandleCounter h = runCounterT loop
+  where
+    newline = BS.singleton 0x0a
+    putLn s = liftIO $ BS.hPut h s >> BS.hPut h newline
+
+    loop = do
         ms <- lift await
         case ms of
             Nothing -> return ()
-            Just s  -> addCounter >> putLn h s >> loop h
+            Just s  -> addCounter >> putLn s >> loop
+
+
+-- | A sink that will write the incoming ByteStrings to the given file
+-- separated by new lines and output the number of lines written.
+sinkFileCounter :: MonadResource m => FilePath -> Sink BS.ByteString m Int
+sinkFileCounter fp = bracketP (IO.openBinaryFile fp IO.WriteMode)
+                               IO.hClose sinkHandleCounter
+
 
 -- | Group @n@ elements from upstream and send the list downstream.
 group :: Monad m => Int -> Conduit a m [a]
