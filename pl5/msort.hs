@@ -21,6 +21,8 @@ import           Data.Word                    (Word8)
 import           Foreign.ForeignPtr           (ForeignPtr, finalizeForeignPtr,
                                                withForeignPtr)
 import           Prelude                      hiding (lines)
+import           System.Directory             (doesFileExist, removeFile,
+                                               renameFile)
 import           System.Environment           (getArgs, getProgName)
 import           System.Exit                  (exitFailure)
 import qualified System.IO                    as IO
@@ -47,18 +49,17 @@ addCounter = modify (+ 1)
 -- buffer and returns a ByteString referencing that buffer.
 hGetBufSome :: IO.Handle -> ForeignPtr Word8 -> Int -> IO BS.ByteString
 hGetBufSome handle ptr count = do
-    bytesRead <- withForeignPtr ptr $ \p ->
-                 IO.hGetBufSome handle p count
-    return $! BSI.PS ptr 0 bytesRead -- <- Unsafe
+    bytesRead <- withForeignPtr ptr $ \p -> IO.hGetBufSome handle p count
+    return $! BSI.PS ptr 0 bytesRead
 
 ------------------------------------------------------------------------------
 -- Sources, Conduits, etc.
 ------------------------------------------------------------------------------
 
--- | A Conduit that takes incoming lists and yields all their elements.
+-- | A conduits that accept lists from upstream and yields all their elements
+-- downstream.
 splat :: Monad m => Conduit [a] m a
 splat = awaitForever $ mapM_ yield
-
 
 -- | Similar to @sourceFile@ except that this can operate on an existing
 -- handle.
@@ -77,9 +78,8 @@ sourceFileHandle bsize h =
         unless (BS.null bs) $
             yield bs >> loop ptr
 
-
--- | Stream the contents of the given file as binary data. Use the given block
--- size.
+-- | @sourceFile bsize fp@ sends blocks of bytestrings of size @bsize@
+-- downstream.
 --
 -- This is similar to @Conduit.Binary.sourceFile@ except that the same block
 -- of memory is re-used. So, only one block is accessible at a time. Trying to
@@ -92,13 +92,6 @@ sourceFile bsize fp =
     -- Open the file and ensure it is closed after we are done.
     bracketP (IO.openBinaryFile fp IO.ReadMode) IO.hClose $
     sourceFileHandle bsize
-
-
--- | Split incoming chunks of @ByteString@s on line breaks. Empty strings will
--- be discarded.
-lines :: Monad m => Conduit BS.ByteString m [BS.ByteString]
-lines = CL.map $ filter (not . BS.null) . BS.split 0x0a
-
 
 -- | @sourceSortedRun h start runLen bufSize@ iterates through the sorted run
 -- of size @runLen@ in the file @h@ starting at offset @start@. A buffer of
@@ -120,7 +113,7 @@ sourceSortedRun h start runLength bufSize =
                        >> hGetBufSome h ptr realBufSize
 
         unless (BS.null block) $ do
-            let records = filter (not . BS.null) (BS.split 0x0a block)
+            let records = lines block
                 toYield = take count records
                 newCount = count - length toYield
             -- This BS.copy is important. Without this, multiple ByteStrings
@@ -133,7 +126,9 @@ sourceSortedRun h start runLength bufSize =
     -- less than the original buffer size.
     realBufSize = (bufSize `quot` recordSize) * recordSize
 
--- | Version of @sinkFileCounter@ that works on existing handles.
+-- | @sinkHandleCounter h@ reads bytestrings from upstream and writes them to
+-- @h@ followed by a newline. The total number of lines read and written is
+-- returned.
 sinkHandleCounter :: MonadIO m => IO.Handle -> Sink BS.ByteString m Int
 sinkHandleCounter h = runCounterT loop
   where
@@ -147,14 +142,7 @@ sinkHandleCounter h = runCounterT loop
             Just s  -> addCounter >> putLn s >> loop
 
 
--- | A sink that will write the incoming ByteStrings to the given file
--- separated by new lines and output the number of lines written.
-sinkFileCounter :: MonadResource m => FilePath -> Sink BS.ByteString m Int
-sinkFileCounter fp = bracketP (IO.openBinaryFile fp IO.WriteMode)
-                               IO.hClose sinkHandleCounter
-
-
--- | Group @n@ elements from upstream and send the list downstream.
+-- | Groups @n@ elements from upstream into a list and sends it downstream.
 group :: Monad m => Int -> Conduit a m [a]
 group n = loop
     where loop = do l <- CL.take n
@@ -169,12 +157,39 @@ group n = loop
 now :: IO Int
 now = truncate . (* 1000) <$> getPOSIXTime
 
+-- | Get the third element of the tuple.
+thrd :: (a, b, c) -> c
+thrd (_, _, c) = c
+
+-- | Get the first element of a 3-tuple.
+fst3 :: (a, b, c) -> a
+fst3 (a, _, _) = a
+
 -- Return the minimum value and its index.
 imin :: (a -> a -> Ordering) -> V.Vector a -> (Int, a)
 imin cmpr vec = V.ifoldr' cmp' (0, vec V.! 0) vec
     where cmp' ai a (bi, b) = case a `cmpr` b of
                                 LT -> (ai, a)
                                 _  -> (bi, b)
+
+
+-- | Allocate a temporary file under a Resource monad. They file will be
+-- deleted when the key is released.
+allocateTempFile
+    :: MonadResource m
+    => String
+    -> m (Res.ReleaseKey, FilePath, IO.Handle)
+allocateTempFile pat = do
+    (k, (p, h)) <- Res.allocate (IO.openBinaryTempFile "." pat) clean
+    return (k, p, h)
+  where
+    clean (p, h) = do IO.hClose h
+                      exists <- doesFileExist p
+                      when exists (removeFile p)
+
+-- | Splits bytestrings on newlines. Discards empty lines.
+lines :: BS.ByteString -> [BS.ByteString]
+lines = filter (not . BS.null) . BS.split 0x0a
 
 ------------------------------------------------------------------------------
 -- msort
@@ -193,13 +208,13 @@ recordSize = 9
 -- The total number of records written is returned
 makeRuns
     :: FilePath     -- ^ Path to the file containing the unsorted data
-    -> FilePath     -- ^ Target file to which sorted runs will be written
+    -> IO.Handle    -- ^ Target file to which sorted runs will be written
     -> Int          -- ^ Number of records in each sorted run
     -> IO Int
-makeRuns inFile outFile runLength =
+makeRuns inFile outHandle runLength =
     runResourceT $  sourceFile blockSize inFile
-                 $= lines $= CL.map List.sort
-                 $= splat $$ sinkFileCounter outFile
+                 $= CL.map (List.sort . lines)
+                 $= splat $$ sinkHandleCounter outHandle
   -- Number of bytes consumed by @runLength@ records.
   where blockSize = runLength * recordSize
 
@@ -213,19 +228,18 @@ makeRuns inFile outFile runLength =
 -- Total memory used by buffers will be @K * bufSize@.
 mergeRuns
     :: MonadResource m
-    => FilePath     -- ^ Path to the file containing the sorted runs
+    => IO.Handle    -- ^ File containing the sorted runs
     -> Int          -- ^ Number of records in each sorted run
     -> Int          -- ^ Buffer size to use to read from each sorted run
     -> [Integer]    -- ^ List of starting positions of each run
     -> Source m BS.ByteString
-mergeRuns fin runLen bsize positions =
-    bracketP (IO.openBinaryFile fin IO.ReadMode) IO.hClose $ \h -> do
-    let sources = map (runIterator h) positions
+mergeRuns h runLen bsize positions = do
+    let sources = map runIterator positions
     sourcesAndValues <- lift $! mapM ($$+ CL.head) sources
     loop (V.fromList $ map (first Just) sourcesAndValues)
   where
     -- Source that yields elements of the given run.
-    runIterator h pos = sourceSortedRun h pos runLen bsize
+    runIterator pos = sourceSortedRun h pos runLen bsize
 
     cmp Nothing Nothing   = EQ
     cmp Nothing _         = GT
@@ -263,47 +277,58 @@ main = do
         memCapacity         = read (head rest) :: Int
         k                   = read (last rest) :: Int
         runLength           = memCapacity `quot` recordSize
-
-        -- Actual block size. This will be different from memCapacity if the
-        -- value was nota aligned to the record size.
-        blockSize = runLength * recordSize
-
-        -- Divide the available memory into k parts. Use only memory that can
-        -- use full records.
-        bufSize = ((memCapacity `quot` k) `quot` recordSize) * recordSize
+        bufSize             = ((memCapacity `quot` k) `quot` recordSize)
+                                * recordSize
 
     unless (bufSize > 0) $ do
         putStrLn $ printf "Not enough memory to perform %d-way merge." k
         putStrLn $ printf "Need at least %d bytes." (k * recordSize)
         exitFailure
 
-    putStrLn $ printf "Using a run length of %d records." runLength
-
-    startTime <- now
-    totalRecords <- makeRuns inFile outFile runLength
-    putStrLn $ printf "Run 0 done. %d records written." totalRecords
-
-    let totalSize = fromIntegral $ totalRecords * recordSize
-        runPositions = [0, fromIntegral blockSize .. totalSize-1] :: [Integer]
-
-    putStrLn $ printf "Performing %d-way merge with a buffer size of %d."
-                      k bufSize
-
-    let runGroups = CL.sourceList runPositions $= group k
+    putStrLn $ printf "%d-way merge; buffer size: %d; run length %d records"
+                      k bufSize runLength
 
     runResourceT $ do
-        (key, h) <- Res.allocate (IO.openBinaryFile "tmp.txt" IO.WriteMode)
-                                  IO.hClose
+        runFile@(_, _, rfile) <- allocateTempFile "run.txt"
 
-        runGroups $$ awaitForever $ \pos -> do
-            wrote <- mergeRuns outFile runLength bufSize pos
-                  $$ sinkHandleCounter h
+        startTime <- liftIO now
 
-            liftIO . putStrLn $
-                printf "Wrote %d records for run: %s" wrote
-                       (List.intercalate ", " $ map show pos)
+        -- Pass 0
+        totalRecords <- liftIO $ makeRuns inFile rfile runLength
+        -- File is now @runLength@-sorted.
 
-        release key
+        -- TODO state monad?
+        let totalSize = fromIntegral $ totalRecords * recordSize
 
-    endTime <- now
-    putStrLn $ printf "TIME: %d milliseconds" (endTime - startTime)
+            loop
+                :: MonadResource m
+                => (Res.ReleaseKey, FilePath, IO.Handle)
+                -> (Res.ReleaseKey, FilePath, IO.Handle)
+                -> Int
+                -> m (Res.ReleaseKey, FilePath, IO.Handle)
+            loop input output n | n >= totalRecords = return input
+                                | otherwise = do
+                let positions = [0, fromIntegral bufSize .. totalSize-1]
+                    groups = CL.sourceList positions $= group k
+
+                -- k-way merge
+                groups $$ awaitForever $ \pos ->
+                  void $  mergeRuns (thrd input) n bufSize pos
+                       $$ sinkHandleCounter (thrd output)
+
+                -- Now have (n * k)-sorted. Get rid of old input file.
+                Res.release (fst3 input)
+                let newInput = output
+                newOutput <- allocateTempFile "run.txt"
+
+                loop newInput newOutput (n * k)
+
+        targetFile <- allocateTempFile "run.txt"
+        (_, sortedp, sortedh) <- loop runFile targetFile runLength
+
+        liftIO $ IO.hClose sortedh
+              >> renameFile sortedp outFile
+
+        endTime <- liftIO now
+        liftIO . putStrLn $ printf "TIME: %d msecs" (endTime - startTime)
+
