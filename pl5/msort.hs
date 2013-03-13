@@ -120,17 +120,18 @@ sourceSortedRun h start runLength bufSize =
                        >> hGetBufSome h ptr realBufSize
 
         unless (BS.null block) $ do
-            newCount <- foldM step count
-                        (filter (not . BS.null) . BS.split 0x0a $ block)
+            let records = filter (not . BS.null) (BS.split 0x0a block)
+                toYield = take count records
+                newCount = count - length toYield
+            -- This BS.copy is important. Without this, multiple ByteStrings
+            -- wil end up referring to the same buffer and become invalid when
+            -- it becomes changed.
+            mapM_ (yield . BS.copy) toYield
             loop ptr (pos + fromIntegral realBufSize) newCount
-
-    step 0 _ = return 0
-    step n s = yield s >> return (n-1)
 
     -- Change buffer size to the closest multiple of the recordSize that is
     -- less than the original buffer size.
     realBufSize = (bufSize `quot` recordSize) * recordSize
-
 
 -- | Version of @sinkFileCounter@ that works on existing handles.
 sinkHandleCounter :: MonadIO m => IO.Handle -> Sink BS.ByteString m Int
