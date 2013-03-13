@@ -278,18 +278,21 @@ main = do
     putStrLn $ printf "Performing %d-way merge with a buffer size of %d."
                       k bufSize
 
+    let runGroups = CL.sourceList runPositions $= group k
+
     runResourceT $ do
         (key, h) <- Res.allocate (IO.openBinaryFile "tmp.txt" IO.WriteMode)
                                   IO.hClose
-        CL.sourceList runPositions $= group k $$ awaitForever $ \pos ->
-            mergeRuns outFile runLength bufSize pos $$ sinkHandle h
+
+        runGroups $$ awaitForever $ \pos -> do
+            wrote <- mergeRuns outFile runLength bufSize pos
+                  $$ sinkHandleCounter h
+
+            liftIO . putStrLn $
+                printf "Wrote %d records for run: %s" wrote
+                       (List.intercalate ", " $ map show pos)
+
         release key
 
     endTime <- now
     putStrLn $ printf "TIME: %d milliseconds" (endTime - startTime)
-
-sinkHandle :: MonadResource m => IO.Handle -> Sink BS.ByteString m ()
-sinkHandle h = CL.mapM_ puts
-  where
-    puts s  = liftIO $ BS.hPut h s >> BS.hPut h newline
-    newline = BS.singleton 0x0a
