@@ -1,12 +1,10 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TupleSections, FlexibleContexts #-}
 module Main (main) where
 
 import           Control.Applicative          ((<$>))
 import           Control.Arrow                (first)
 import           Control.Monad
-import           Control.Monad.IO.Class       (MonadIO (liftIO))
-import           Control.Monad.State          (StateT, execStateT, modify)
-import           Control.Monad.Trans.Class    (lift)
+import           Control.Monad.State
 import           Control.Monad.Trans.Resource as Res
 import qualified Data.ByteString              as BS
 import qualified Data.ByteString.Internal     as BSI
@@ -35,10 +33,10 @@ import           Text.Printf                  (printf)
 -- A simple wrapper around the StateT monad to keep count of something.
 type CounterT m = StateT Int m
 
-runCounterT :: Monad m => CounterT m () -> m Int
-runCounterT c = execStateT c 0
+execCounterT :: Monad m => CounterT m a -> m Int
+execCounterT = flip execStateT 0
 
-addCounter :: Monad m => CounterT m ()
+addCounter :: MonadState Int m => m ()
 addCounter = modify (+ 1)
 
 ------------------------------------------------------------------------------
@@ -129,21 +127,13 @@ sourceSortedRun h start runLength bufSize =
     -- less than the original buffer size.
     realBufSize = (bufSize `quot` recordSize) * recordSize
 
--- | @sinkHandleCounter h@ reads bytestrings from upstream and writes them to
--- @h@ followed by a newline. The total number of lines read and written is
--- returned.
-sinkHandleCounter :: MonadIO m => IO.Handle -> Sink BS.ByteString m Int
-sinkHandleCounter h = runCounterT loop
+-- | @sinkLines h@ writes all bytestrings to the given handle followed by
+-- newlines.
+sinkLines :: MonadIO m => IO.Handle -> Sink BS.ByteString m ()
+sinkLines h = CL.mapM_ putLn
   where
     newline = BS.singleton 0x0a
     putLn s = liftIO $ BS.hPut h s >> BS.hPut h newline
-
-    loop = do
-        ms <- lift await
-        case ms of
-            Nothing -> return ()
-            Just s  -> addCounter >> putLn s >> loop
-
 
 -- | Groups @n@ elements from upstream into a list and sends it downstream.
 group :: Monad m => Int -> Conduit a m [a]
@@ -151,6 +141,11 @@ group n = loop
     where loop = do l <- CL.take n
                     unless (null l) $ yield l >> loop
 
+
+-- | A Conduit that keeps track of the number of values that pass through it.
+-- The underlying monad must have an Int state.
+counter :: MonadState Int m => Conduit a m a
+counter = CL.iterM (const addCounter)
 
 ------------------------------------------------------------------------------
 -- Utilities
@@ -215,9 +210,11 @@ makeRuns
     -> Int          -- ^ Number of records in each sorted run
     -> IO Int
 makeRuns inFile outHandle runLength =
-    runResourceT $  sourceFile blockSize inFile
+    execCounterT $ runResourceT
+                 $  sourceFile blockSize inFile
                  $= CL.map (List.sort . lines)
-                 $= splat $$ sinkHandleCounter outHandle
+                 $= splat $$ counter
+                 =$ sinkLines outHandle
   -- Number of bytes consumed by @runLength@ records.
   where blockSize = runLength * recordSize
 
@@ -317,8 +314,8 @@ main = do
 
                 -- k-way merge
                 groups $$ CL.mapM_ $ \pos ->
-                  void $  mergeRuns (thrd input) n bufSize pos
-                       $$ sinkHandleCounter (thrd output)
+                  mergeRuns (thrd input) n bufSize pos
+                       $$ sinkLines (thrd output)
 
                 -- Now have (n * k)-sorted. Get rid of old input file.
                 Res.release (fst3 input)
