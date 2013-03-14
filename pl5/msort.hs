@@ -1,20 +1,25 @@
-{-# LANGUAGE TupleSections, FlexibleContexts, BangPatterns #-}
+{-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TupleSections         #-}
 module Main (main) where
 
 import           Control.Applicative          ((<$>))
-import           Control.Arrow                (first)
 import           Control.Monad
+import qualified Control.Monad.Primitive      as Prim
 import           Control.Monad.State
 import           Control.Monad.Trans.Resource as Res
 import qualified Data.ByteString              as BS
 import qualified Data.ByteString.Internal     as BSI
 import           Data.Conduit
+import qualified Data.Conduit.Binary          as CB
 import qualified Data.Conduit.List            as CL
 import           Data.Function                (on)
-import qualified Data.List                    as List
 import           Data.Maybe                   (fromJust, isNothing)
 import           Data.Time.Clock.POSIX        (getPOSIXTime)
 import qualified Data.Vector                  as V
+import qualified Data.Vector.Algorithms.Intro as Intro
+import qualified Data.Vector.Mutable          as VM
 import           Data.Word                    (Word8)
 import           Foreign.ForeignPtr           (ForeignPtr, finalizeForeignPtr,
                                                withForeignPtr)
@@ -61,11 +66,9 @@ hGetBuf handle !ptr !count = do
 -- Sources, Conduits, etc.
 ------------------------------------------------------------------------------
 
--- | A conduits that accept lists from upstream and yields all their elements
--- downstream.
-splat :: Monad m => Conduit [a] m a
-splat = awaitForever $ mapM_ yield
-{-# INLINE splat #-}
+splatV :: Monad m => Conduit (V.Vector a) m a
+splatV = awaitForever $ V.mapM_ yield
+{-# INLINE splatV #-}
 
 -- | Similar to @sourceFile@ except that this can operate on an existing
 -- handle.
@@ -120,10 +123,10 @@ sourceSortedRun h !start !runLength bufSize =
                        >> hGetBuf h ptr realBufSize
 
         unless (BS.null block) $ do
-            let records = lines block
-                toYield = take count records
-                newCount = count - length toYield
-            mapM_ yield toYield
+            let records = toRecords block
+                toYield = V.take count records
+                newCount = count - V.length toYield
+            V.mapM_ yield toYield
             loop ptr (pos + fromIntegral realBufSize) newCount
 
     -- Change buffer size to the closest multiple of the recordSize that is
@@ -131,21 +134,29 @@ sourceSortedRun h !start !runLength bufSize =
     realBufSize = (bufSize `quot` recordSize) * recordSize
 {-# INLINE sourceSortedRun #-}
 
--- | @sinkLines h@ writes all bytestrings to the given handle followed by
--- newlines.
-sinkLines :: MonadIO m => IO.Handle -> Sink BS.ByteString m ()
-sinkLines h = CL.mapM_ putLn
+-- | @takeV n@ takes @n@ values from upstream and puts them into a vector.
+takeV :: (Monad m, Prim.PrimMonad m) => Int -> Consumer a m (V.Vector a)
+takeV !n = (lift $! VM.new n) >>= go
   where
-    newline  = BS.singleton 0x0a
-    putLn !s = liftIO $ BS.hPut h s >> BS.hPut h newline
-{-# INLINE sinkLines #-}
+    go v = loop 0
+      where
+        loop i
+            | i == n    = lift $! V.unsafeFreeze v
+            | otherwise =
+                    do  x <- await
+                        case x of
+                            Just x' -> do lift $! VM.write v i x'
+                                          loop $! i + 1
+                            Nothing -> lift $! V.unsafeFreeze (VM.take i v)
+{-# INLINE takeV #-}
 
--- | Groups @n@ elements from upstream into a list and sends it downstream.
-group :: Monad m => Int -> Conduit a m [a]
-group n = loop
-    where loop = do l <- CL.take n
-                    unless (null l) $ yield l >> loop
-{-# INLINE group #-}
+-- | @groupV n@ takes values from upstream and puts them in groups of @n@ as
+-- vectors.
+groupV :: (Monad m, Prim.PrimMonad m) => Int -> Conduit a m (V.Vector a)
+groupV !n = loop
+  where loop = do v <- takeV n
+                  unless (V.null v) $! yield v >> loop
+{-# INLINE groupV #-}
 
 -- | A Conduit that keeps track of the number of values that pass through it.
 -- The underlying monad must have an Int state.
@@ -191,10 +202,30 @@ allocateTempFile pat = do
                       exists <- doesFileExist p
                       when exists (removeFile p)
 
--- | Splits bytestrings on newlines. Discards empty lines.
-lines :: BS.ByteString -> [BS.ByteString]
-lines = filter (not . BS.null) . BS.split 0x0a
-{-# INLINE lines #-}
+-- | Same as @toRecords@ except that a mutable vector is returned.
+toRecordsM
+    :: Prim.PrimMonad m
+    => BS.ByteString
+    -> m (VM.MVector (Prim.PrimState m) BS.ByteString)
+toRecordsM s = VM.new count >>= go
+  where
+    count = BS.length s `quot` recordSize
+    go !v  = loop 0
+      where
+        loop i | i == count = return v
+               | otherwise  = do
+                      let !x = BS.take recordSize
+                             $ BS.drop (i * recordSize) s
+                      VM.write v i x
+                      loop $! i + 1
+{-# INLINE toRecordsM #-}
+
+-- | Groups the given bytestrings into records. Each record is assumed to be
+-- @recordSize@ bytes. The given ByteString's length must be a multiple of
+-- @recordSize@.
+toRecords :: BS.ByteString -> V.Vector BS.ByteString
+toRecords !s = V.create $ toRecordsM s
+{-# INLINE toRecords #-}
 
 ------------------------------------------------------------------------------
 -- msort
@@ -218,11 +249,17 @@ makeRuns
 makeRuns inFile outHandle runLength =
     execCounterT $ runResourceT
                  $  sourceFile blockSize inFile
-                 $= CL.map (List.sort . lines)
-                 $= splat $$ counter
-                 =$ sinkLines outHandle
+                 $= CL.mapM sortRecords
+                 $= splatV $$ counter
+                 =$ CB.sinkHandle outHandle
   -- Number of bytes consumed by @runLength@ records.
-  where blockSize = runLength * recordSize
+  where blockSize   = runLength * recordSize
+
+        sortRecords :: MonadIO m => BS.ByteString -> m (V.Vector BS.ByteString)
+        sortRecords !s = liftIO $ do
+                            recs <- toRecordsM s
+                            Intro.sort recs
+                            V.unsafeFreeze $! recs
 {-# INLINE makeRuns #-}
 
 -- @mergeRuns fin runLength bufSize positions@ merges K runs (where K is the
@@ -235,15 +272,17 @@ makeRuns inFile outHandle runLength =
 -- Total memory used by buffers will be @K * bufSize@.
 mergeRuns
     :: MonadResource m
-    => IO.Handle    -- ^ File containing the sorted runs
-    -> Int          -- ^ Number of records in each sorted run
-    -> Int          -- ^ Buffer size to use to read from each sorted run
-    -> [Integer]    -- ^ List of starting positions of each run
+    => IO.Handle        -- ^ File containing the sorted runs
+    -> Int              -- ^ Number of records in each sorted run
+    -> Int              -- ^ Buffer size to use to read from each sorted run
+    -> V.Vector Integer -- ^ List of starting positions of each run
     -> Source m BS.ByteString
-mergeRuns h runLen bsize !positions = do
-    let sources = map runIterator positions
-    sourcesAndValues <- lift $! mapM ($$+ CL.head) sources
-    loop (V.fromList $ map (first Just) sourcesAndValues)
+mergeRuns h runLen bsize positions = do
+    let sources = V.map runIterator positions
+    sourcesAndValues <- lift $! V.forM sources $ \s -> do
+                                    (s', v) <- s $$+ CL.head
+                                    return (Just s', v)
+    loop sourcesAndValues
   where
     -- Source that yields elements of the given run.
     runIterator !pos = sourceSortedRun h pos runLen bsize
@@ -319,12 +358,12 @@ main = do
                                 | otherwise = do
                 let positions = range 0 (fromIntegral $ n * recordSize)
                                         (fromIntegral $ totalSize - 1)
-                    groups = positions $= group k
-                                                                   
+                    groups = positions $= transPipe liftIO (groupV k)
+
                 -- k-way merge
                 groups $$ CL.mapM_ $ \pos ->
                   mergeRuns (thrd input) n bufSize pos
-                       $$ sinkLines (thrd output)
+                       $$ CB.sinkHandle (thrd output)
 
                 -- Now have (n * k)-sorted
                 let newInput = output
