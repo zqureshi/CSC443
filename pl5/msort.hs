@@ -37,7 +37,11 @@ execCounterT :: Monad m => CounterT m a -> m Int
 execCounterT = flip execStateT 0
 
 addCounter :: MonadState Int m => m ()
-addCounter = modify (+ 1)
+-- Do not use @modify@ here. Need to force evaluation of the @(x + 1)@.
+-- Otherwise, we build up thunks of unevaluated counts until the final count
+-- is requested.
+addCounter = do x <- get
+                put $! x + 1
 
 ------------------------------------------------------------------------------
 -- I/O
@@ -148,6 +152,16 @@ group n = loop
 counter :: MonadState Int m => Conduit a m a
 counter = CL.iterM (const addCounter)
 {-# INLINE counter #-}
+
+-- | @range start step step@ produces numbers from from @start@ to @stop@
+-- inclusive. @step@ specifies the number to add at each step.
+range :: (Num a, Ord a, Monad m) => a -> a -> a -> Source m a
+range start step stop = loop start
+  where
+    loop i
+        | i <= stop = yield i >> loop (i + step)
+        | otherwise = return ()
+{-# INLINE range #-}
 
 ------------------------------------------------------------------------------
 -- Utilities
@@ -292,8 +306,8 @@ main = do
         totalRecords <- liftIO $ makeRuns inFile rfile runLength
         -- File is now @runLength@-sorted.
 
-        -- TODO state monad?
-        let !totalSize = fromIntegral $ totalRecords * recordSize
+        -- TODO reader monad?
+        let totalSize = totalRecords * recordSize
 
             loop
                 :: MonadResource m
@@ -303,10 +317,10 @@ main = do
                 -> m (Res.ReleaseKey, FilePath, IO.Handle)
             loop input output n | n >= totalRecords = return input
                                 | otherwise = do
-                let blockSize = fromIntegral $ n * recordSize
-                    !positions = [0, blockSize .. totalSize-1]
-                    groups = CL.sourceList positions $= group k
-
+                let positions = range 0 (fromIntegral $ n * recordSize)
+                                        (fromIntegral $ totalSize - 1)
+                    groups = positions $= group k
+                                                                   
                 -- k-way merge
                 groups $$ CL.mapM_ $ \pos ->
                   mergeRuns (thrd input) n bufSize pos
