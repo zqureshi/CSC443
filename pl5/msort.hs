@@ -117,10 +117,7 @@ sourceSortedRun h start runLength bufSize =
             let records = lines block
                 toYield = take count records
                 newCount = count - length toYield
-            -- This BS.copy is important. Without this, multiple ByteStrings
-            -- wil end up referring to the same buffer and become invalid when
-            -- it becomes changed.
-            mapM_ (yield . BS.copy) toYield
+            mapM_ yield toYield
             loop ptr (pos + fromIntegral realBufSize) newCount
 
     -- Change buffer size to the closest multiple of the recordSize that is
