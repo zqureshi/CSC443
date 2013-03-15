@@ -1,4 +1,4 @@
-TARGETS = mkunsorted msort bsort collect_K
+TARGETS = mkunsorted msort bsort collect_K collect_mem
 GHCOPTS = 
 
 .PHONY: all clean
