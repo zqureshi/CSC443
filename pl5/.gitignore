@@ -13,3 +13,4 @@ sorted.small.txt
 unsorted.medium.txt
 sorted.medium.txt
 collect_mem
+collect_file
