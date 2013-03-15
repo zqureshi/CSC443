@@ -1,4 +1,11 @@
+base
 bytestring
-random
 conduit
+data-default
+filepath
 leveldb-haskell
+random
+resourcet
+time
+vector
+vector-algorithms
