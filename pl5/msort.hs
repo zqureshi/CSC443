@@ -378,5 +378,5 @@ main = do
               >> renameFile sortedp outFile
 
         endTime <- liftIO now
-        liftIO . putStrLn $ printf "TIME: %d msecs" (endTime - startTime)
+        liftIO . putStrLn $ printf "TIME: %d milliseconds" (endTime - startTime)
 
