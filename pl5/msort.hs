@@ -6,7 +6,7 @@ module Main (main) where
 
 import           Control.Applicative          ((<$>))
 import           Control.Monad
-import qualified Control.Monad.Primitive      as Prim
+import           Control.Monad.Primitive      (PrimMonad, PrimState)
 import           Control.Monad.State
 import           Control.Monad.Trans.Resource as Res
 import qualified Data.ByteString              as BS
@@ -63,7 +63,6 @@ countSunk (CI.ConduitM pipe) = CI.ConduitM $ loop 0 pipe
             CI.PipeM mp         -> lift mp >>= loop i
             CI.Leftover p' _    -> loop i p'
 {-# INLINE countSunk #-}
-
 
 splatV :: Monad m => Conduit (V.Vector a) m a
 splatV = awaitForever $ V.mapM_ yield
@@ -134,7 +133,7 @@ sourceSortedRun h !start !runLength bufSize =
 {-# INLINE sourceSortedRun #-}
 
 -- | @takeV n@ takes @n@ values from upstream and puts them into a vector.
-takeV :: (Monad m, Prim.PrimMonad m) => Int -> Consumer a m (V.Vector a)
+takeV :: (Monad m, PrimMonad m) => Int -> Consumer a m (V.Vector a)
 takeV !n = (lift $! VM.new n) >>= go
   where
     go v = loop 0
@@ -151,7 +150,7 @@ takeV !n = (lift $! VM.new n) >>= go
 
 -- | @groupV n@ takes values from upstream and puts them in groups of @n@ as
 -- vectors.
-groupV :: (Monad m, Prim.PrimMonad m) => Int -> Conduit a m (V.Vector a)
+groupV :: (Monad m, PrimMonad m) => Int -> Conduit a m (V.Vector a)
 groupV !n = loop
   where loop = do v <- takeV n
                   unless (V.null v) $! yield v >> loop
@@ -197,9 +196,9 @@ allocateTempFile pat = do
 
 -- | Same as @toRecords@ except that a mutable vector is returned.
 toRecordsM
-    :: Prim.PrimMonad m
+    :: PrimMonad m
     => BS.ByteString
-    -> m (VM.MVector (Prim.PrimState m) BS.ByteString)
+    -> m (VM.MVector (PrimState m) BS.ByteString)
 toRecordsM s = VM.new count >>= go
   where
     count = BS.length s `quot` recordSize
@@ -336,7 +335,7 @@ main = do
         -- Pass 0
         totalRecords <- liftIO $ makeRuns inFile rfile runLength
         -- File is now @runLength@-sorted.
-        
+
         liftIO $ putStrLn $ printf "Pass 0: %d records" totalRecords
 
         let totalSize = totalRecords * recordSize
