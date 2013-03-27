@@ -262,6 +262,26 @@ toRecords !s = V.create $ toRecordsMV s
 recordSize :: Int
 recordSize = 9
 
+-- | A Conduit that reads ByteStrings from upstream (assuming them to be of
+-- the given size) and outputs vectors of bytestrings.
+sortRecords
+    :: PrimMonad m
+    => Int
+    -> Conduit BS.ByteString m (VM.MVector (PrimState m) BS.ByteString)
+sortRecords blockSize = do
+    v <- lift $ VM.new count
+    awaitForever $ \s -> do
+        c <- lift $ do VM.clear v
+                       readRecords v 0 s
+        let v' = if c == count
+                  then v
+                  else VM.take c v
+        lift $ Intro.sort v'
+        yield v'
+  where
+        count = blockSize `quot` recordSize
+{-# INLINE sortRecords #-}
+
 -- | @makeRuns input output length@ makes runs of length @length@ in @output@.
 -- @length@ specifies the number of records, not the number of bytes.
 --
@@ -275,19 +295,13 @@ makeRuns
     -> IO Int
 makeRuns inFile outHandle runLength = runResourceT . fmap snd
     $  sourceFile blockSize inFile
-    $= transPipe liftIO (CL.mapM sortRecords =$= splatMV)
+    $= transPipe liftIO (sortRecords blockSize =$= splatMV)
     $$ countSunk
      $ CB.sinkHandle outHandle
   -- Number of bytes consumed by @runLength@ records.
-  where blockSize   = runLength * recordSize
+  where blockSize = runLength * recordSize
 
-        sortRecords
-            :: PrimMonad m
-            => BS.ByteString
-            -> m (VM.MVector (PrimState m) BS.ByteString)
-        sortRecords !s = do recs <- toRecordsMV s
-                            Intro.sort recs
-                            return recs
+
 {-# INLINE makeRuns #-}
 
 -- @mergeRuns fin runLength bufSize positions@ merges K runs (where K is the
