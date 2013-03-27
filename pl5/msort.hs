@@ -199,22 +199,52 @@ allocateTempFile pat = do
                       exists <- doesFileExist p
                       when exists (removeFile p)
 
+-- | @substr i n s@ returns a substring of @s@ starting at index @i@ of length
+-- @n@.
+substr :: Int -> Int -> BS.ByteString -> BS.ByteString
+substr i n ps@(BSI.PS x s l)
+    | i <= 0 && n >= l = ps
+    | i >= l || l <= 0 = BS.empty
+    | otherwise        = BSI.PS x (s + i) n
+
+-- | Read records from the given bytestring into the given mutable vector
+-- starting at the given index.
+--
+-- Only the first @N@ records will be read, where @N@ is the number of slots
+-- in the vector.
+--
+-- Returns the number of records read.
+readRecords
+    :: PrimMonad m
+    => VM.MVector (PrimState m) BS.ByteString
+    -> Int
+    -> BS.ByteString
+    -> m Int
+readRecords v !idx s = loop idx 0
+  where
+    vlen = VM.length v
+    slen = BS.length s
+
+    sub i = substr i recordSize s
+
+    loop vi si | vi == vlen = return vi
+               | si >= slen = return vi
+               | otherwise  = VM.write v vi (sub si) >>
+                              loop (vi + 1) (si + recordSize)
+{-# INLINE readRecords #-}
+
 -- | Same as @toRecords@ except that a mutable vector is returned.
 toRecordsMV
     :: PrimMonad m
     => BS.ByteString
     -> m (VM.MVector (PrimState m) BS.ByteString)
-toRecordsMV s = VM.new count >>= go
+toRecordsMV s = do v <- VM.new count
+                   c <- readRecords v 0 s
+                   if c == count
+                     then return v
+                     else return $! VM.take c v
   where
     count = BS.length s `quot` recordSize
-    go !v  = loop 0
-      where
-        loop i | i == count = return v
-               | otherwise  = do
-                      let !x = BS.take recordSize
-                             $ BS.drop (i * recordSize) s
-                      VM.write v i x
-                      loop $! i + 1
 {-# INLINE toRecordsMV #-}
 
 -- | Groups the given bytestrings into records. Each record is assumed to be
