@@ -336,21 +336,25 @@ main = do
         -- Pass 0
         totalRecords <- liftIO $ makeRuns inFile rfile runLength
         -- File is now @runLength@-sorted.
+        
+        liftIO $ putStrLn $ printf "Pass 0: %d records" totalRecords
 
-        -- TODO reader monad?
         let totalSize = totalRecords * recordSize
 
             loop
                 :: MonadResource m
-                => (Res.ReleaseKey, FilePath, IO.Handle)
+                => Int
+                -> (Res.ReleaseKey, FilePath, IO.Handle)
                 -> (Res.ReleaseKey, FilePath, IO.Handle)
                 -> Int
                 -> m (Res.ReleaseKey, FilePath, IO.Handle)
-            loop input output n | n >= totalRecords = return input
-                                | otherwise = do
+            loop !pass input output n | n >= totalRecords = return input
+                                      | otherwise = do
                 let positions = range 0 (fromIntegral $ n * recordSize)
                                         (fromIntegral $ totalSize - 1)
                     groups = positions $= transPipe liftIO (groupV k)
+
+                liftIO $ putStrLn $ printf "Pass %d" pass
 
                 -- k-way merge
                 groups $$ CL.mapM_ $ \pos ->
@@ -361,10 +365,10 @@ main = do
                 let newInput = output
                 newOutput <- allocateTempFile "run.txt"
 
-                loop newInput newOutput (n * k)
+                loop (pass + 1) newInput newOutput (n * k)
 
         targetFile <- allocateTempFile "run.txt"
-        (_, sortedp, sortedh) <- loop runFile targetFile runLength
+        (_, sortedp, sortedh) <- loop 1 runFile targetFile runLength
 
         liftIO $ IO.hClose sortedh
               >> renameFile sortedp outFile
