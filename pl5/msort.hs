@@ -195,11 +195,11 @@ allocateTempFile pat = do
                       when exists (removeFile p)
 
 -- | Same as @toRecords@ except that a mutable vector is returned.
-toRecordsM
+toRecordsMV
     :: PrimMonad m
     => BS.ByteString
     -> m (VM.MVector (PrimState m) BS.ByteString)
-toRecordsM s = VM.new count >>= go
+toRecordsMV s = VM.new count >>= go
   where
     count = BS.length s `quot` recordSize
     go !v  = loop 0
@@ -210,13 +210,13 @@ toRecordsM s = VM.new count >>= go
                              $ BS.drop (i * recordSize) s
                       VM.write v i x
                       loop $! i + 1
-{-# INLINE toRecordsM #-}
+{-# INLINE toRecordsMV #-}
 
 -- | Groups the given bytestrings into records. Each record is assumed to be
 -- @recordSize@ bytes. The given ByteString's length must be a multiple of
 -- @recordSize@.
 toRecords :: BS.ByteString -> V.Vector BS.ByteString
-toRecords !s = V.create $ toRecordsM s
+toRecords !s = V.create $ toRecordsMV s
 {-# INLINE toRecords #-}
 
 ------------------------------------------------------------------------------
@@ -248,7 +248,7 @@ makeRuns inFile outHandle runLength = runResourceT . fmap snd
 
         sortRecords :: MonadIO m => BS.ByteString -> m (V.Vector BS.ByteString)
         sortRecords !s = liftIO $ do
-                            recs <- toRecordsM s
+                            recs <- toRecordsMV s
                             Intro.sort recs
                             V.unsafeFreeze $! recs
 {-# INLINE makeRuns #-}
