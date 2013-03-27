@@ -64,9 +64,14 @@ countSunk (CI.ConduitM pipe) = CI.ConduitM $ loop 0 pipe
             CI.Leftover p' _    -> loop i p'
 {-# INLINE countSunk #-}
 
-splatV :: Monad m => Conduit (V.Vector a) m a
-splatV = awaitForever $ V.mapM_ yield
-{-# INLINE splatV #-}
+-- | Read mutable vectors from upstream and yield their elements downstream.
+splatMV :: PrimMonad m => Conduit (VM.MVector (PrimState m) a) m a
+splatMV = awaitForever $ \v -> loop (VM.length v) v 0
+  where
+    loop size v i | i == size = return ()
+                  | otherwise = do lift (VM.read v i) >>= yield
+                                   loop size v $! i + 1
+{-# INLINE splatMV #-}
 
 -- | Similar to @sourceFile@ except that this can operate on an existing
 -- handle.
@@ -240,17 +245,19 @@ makeRuns
     -> IO Int
 makeRuns inFile outHandle runLength = runResourceT . fmap snd
     $  sourceFile blockSize inFile
-    $= CL.mapM sortRecords
-    $= splatV $$ countSunk
+    $= transPipe liftIO (CL.mapM sortRecords =$= splatMV)
+    $$ countSunk
      $ CB.sinkHandle outHandle
   -- Number of bytes consumed by @runLength@ records.
   where blockSize   = runLength * recordSize
 
-        sortRecords :: MonadIO m => BS.ByteString -> m (V.Vector BS.ByteString)
-        sortRecords !s = liftIO $ do
-                            recs <- toRecordsMV s
+        sortRecords
+            :: PrimMonad m
+            => BS.ByteString
+            -> m (VM.MVector (PrimState m) BS.ByteString)
+        sortRecords !s = do recs <- toRecordsMV s
                             Intro.sort recs
-                            V.unsafeFreeze $! recs
+                            return recs
 {-# INLINE makeRuns #-}
 
 -- @mergeRuns fin runLength bufSize positions@ merges K runs (where K is the
