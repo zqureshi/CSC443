@@ -13,6 +13,7 @@ import qualified Data.ByteString              as BS
 import qualified Data.ByteString.Internal     as BSI
 import           Data.Conduit
 import qualified Data.Conduit.Binary          as CB
+import qualified Data.Conduit.Internal        as CI
 import qualified Data.Conduit.List            as CL
 import           Data.Function                (on)
 import           Data.Maybe                   (fromJust, isNothing)
@@ -20,6 +21,7 @@ import           Data.Time.Clock.POSIX        (getPOSIXTime)
 import qualified Data.Vector                  as V
 import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Data.Vector.Mutable          as VM
+import           Data.Void                    (absurd)
 import           Data.Word                    (Word8)
 import           Foreign.ForeignPtr           (ForeignPtr, finalizeForeignPtr,
                                                withForeignPtr)
@@ -30,23 +32,6 @@ import           System.Environment           (getArgs, getProgName)
 import           System.Exit                  (exitFailure)
 import qualified System.IO                    as IO
 import           Text.Printf                  (printf)
-
-------------------------------------------------------------------------------
--- Monads
-------------------------------------------------------------------------------
-
--- A simple wrapper around the StateT monad to keep count of something.
-type CounterT m = StateT Int m
-
-execCounterT :: Monad m => CounterT m a -> m Int
-execCounterT = flip execStateT 0
-
-addCounter :: MonadState Int m => m ()
--- Do not use @modify@ here. Need to force evaluation of the @(x + 1)@.
--- Otherwise, we build up thunks of unevaluated counts until the final count
--- is requested.
-addCounter = do x <- get
-                put $! x + 1
 
 ------------------------------------------------------------------------------
 -- I/O
@@ -65,6 +50,20 @@ hGetBuf handle !ptr !count = do
 ------------------------------------------------------------------------------
 -- Sources, Conduits, etc.
 ------------------------------------------------------------------------------
+
+countSunk :: Monad m => Sink i m a -> Sink i m (a, Int)
+countSunk (CI.ConduitM pipe) = CI.ConduitM $ loop 0 pipe
+  where
+    loop !i p =
+        case p of
+            CI.HaveOutput _ _ o -> absurd o
+            CI.NeedInput rp rc  -> CI.NeedInput (loop (i + 1) . rp)
+                                                (\u -> (,i) <$> rc u)
+            CI.Done a           -> return (a, i)
+            CI.PipeM mp         -> lift mp >>= loop i
+            CI.Leftover p' _    -> loop i p'
+{-# INLINE countSunk #-}
+
 
 splatV :: Monad m => Conduit (V.Vector a) m a
 splatV = awaitForever $ V.mapM_ yield
@@ -158,12 +157,6 @@ groupV !n = loop
                   unless (V.null v) $! yield v >> loop
 {-# INLINE groupV #-}
 
--- | A Conduit that keeps track of the number of values that pass through it.
--- The underlying monad must have an Int state.
-counter :: MonadState Int m => Conduit a m a
-counter = CL.iterM (const addCounter)
-{-# INLINE counter #-}
-
 -- | @range start step step@ produces numbers from from @start@ to @stop@
 -- inclusive. @step@ specifies the number to add at each step.
 range :: (Num a, Ord a, Monad m) => a -> a -> a -> Source m a
@@ -246,12 +239,11 @@ makeRuns
     -> IO.Handle    -- ^ Target file to which sorted runs will be written
     -> Int          -- ^ Number of records in each sorted run
     -> IO Int
-makeRuns inFile outHandle runLength =
-    execCounterT $ runResourceT
-                 $  sourceFile blockSize inFile
-                 $= CL.mapM sortRecords
-                 $= splatV $$ counter
-                 =$ CB.sinkHandle outHandle
+makeRuns inFile outHandle runLength = runResourceT . fmap snd
+    $  sourceFile blockSize inFile
+    $= CL.mapM sortRecords
+    $= splatV $$ countSunk
+     $ CB.sinkHandle outHandle
   -- Number of bytes consumed by @runLength@ records.
   where blockSize   = runLength * recordSize
 
