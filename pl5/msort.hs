@@ -51,6 +51,7 @@ hGetBuf handle !ptr !count = do
 -- Sources, Conduits, etc.
 ------------------------------------------------------------------------------
 
+-- | Modifies an existing sink to count the number of items consumed by it.
 countSunk :: Monad m => Sink i m a -> Sink i m (a, Int)
 countSunk (CI.ConduitM pipe) = CI.ConduitM $ loop 0 pipe
   where
@@ -64,7 +65,7 @@ countSunk (CI.ConduitM pipe) = CI.ConduitM $ loop 0 pipe
             CI.Leftover p' _    -> loop i p'
 {-# INLINE countSunk #-}
 
--- | Read mutable vectors from upstream and yield their elements downstream.
+-- | Reads mutable vectors from upstream and yields their elements downstream.
 splatMV :: PrimMonad m => Conduit (VM.MVector (PrimState m) a) m a
 splatMV = awaitForever $ \v -> loop (VM.length v) v 0
   where
@@ -117,6 +118,7 @@ sourceSortedRun
     -> Int         -- ^ Size of the buffer used to read the data
     -> Source m BS.ByteString
 sourceSortedRun h !start !runLength bufSize =
+    -- The same buffer and vector will be re-used in the loop.
     bracketP (BSI.mallocByteString realBufSize) finalizeForeignPtr $ \ptr -> do
     v <- liftIO $ VM.new recordCapacity
     loop v ptr start runLength
@@ -125,17 +127,22 @@ sourceSortedRun h !start !runLength bufSize =
     loop !v !ptr !pos !count = do
         block <- liftIO $ IO.hSeek h IO.AbsoluteSeek pos
                        >> hGetBuf h ptr realBufSize
-
         unless (BS.null block) $ do
+
+            -- Read the block into a vector of records. The number of records
+            -- in the block can be less than the capacity.
             c <- liftIO $ do VM.clear v
                              readRecords v 0 block
             let v' = if c == recordCapacity
                        then v
                        else VM.take c v
+
+                -- We need only up to @count@ of those records.
                 toYield  = VM.take count v'
                 newCount = count - VM.length toYield
-            yield toYield $= transPipe liftIO splatMV $$ CL.mapM_ yield
 
+            -- Yield everything and move on.
+            yield toYield $= transPipe liftIO splatMV $$ CL.mapM_ yield
             loop v ptr (pos + fromIntegral realBufSize) newCount
 
     -- Change buffer size to the closest multiple of the recordSize that is
@@ -146,18 +153,16 @@ sourceSortedRun h !start !runLength bufSize =
 
 -- | @takeV n@ takes @n@ values from upstream and puts them into a vector.
 takeV :: (Monad m, PrimMonad m) => Int -> Consumer a m (V.Vector a)
-takeV !n = (lift $! VM.new n) >>= go
+takeV !n = (lift $! VM.new n) >>= loop 0
   where
-    go v = loop 0
-      where
-        loop i
-            | i == n    = lift $! V.unsafeFreeze v
-            | otherwise =
-                    do  x <- await
-                        case x of
-                            Just x' -> do lift $! VM.write v i x'
-                                          loop $! i + 1
-                            Nothing -> lift $! V.unsafeFreeze (VM.take i v)
+    loop i v
+        | i == n    = lift $! V.unsafeFreeze v
+        | otherwise =
+                do x <- await
+                   case x of
+                       Just x' -> do lift $! VM.write v i x'
+                                     loop (i + 1) v
+                       Nothing -> lift $! V.unsafeFreeze (VM.take i v)
 {-# INLINE takeV #-}
 
 -- | @groupV n@ takes values from upstream and puts them in groups of @n@ as
