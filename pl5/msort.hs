@@ -117,24 +117,31 @@ sourceSortedRun
     -> Int         -- ^ Size of the buffer used to read the data
     -> Source m BS.ByteString
 sourceSortedRun h !start !runLength bufSize =
-    bracketP (BSI.mallocByteString realBufSize) finalizeForeignPtr $ \ptr ->
-    loop ptr start runLength
+    bracketP (BSI.mallocByteString realBufSize) finalizeForeignPtr $ \ptr -> do
+    v <- liftIO $ VM.new recordCapacity
+    loop v ptr start runLength
   where
-    loop  _    _    0 = return ()
-    loop !ptr !pos !count = do
+    loop  _  _    _    0 = return ()
+    loop !v !ptr !pos !count = do
         block <- liftIO $ IO.hSeek h IO.AbsoluteSeek pos
                        >> hGetBuf h ptr realBufSize
 
         unless (BS.null block) $ do
-            let records = toRecords block
-                toYield = V.take count records
-                newCount = count - V.length toYield
-            V.mapM_ yield toYield
-            loop ptr (pos + fromIntegral realBufSize) newCount
+            c <- liftIO $ do VM.clear v
+                             readRecords v 0 block
+            let v' = if c == recordCapacity
+                       then v
+                       else VM.take c v
+                toYield  = VM.take count v'
+                newCount = count - VM.length toYield
+            yield toYield $= transPipe liftIO splatMV $$ CL.mapM_ yield
+
+            loop v ptr (pos + fromIntegral realBufSize) newCount
 
     -- Change buffer size to the closest multiple of the recordSize that is
     -- less than the original buffer size.
-    realBufSize = (bufSize `quot` recordSize) * recordSize
+    realBufSize = recordCapacity * recordSize
+    recordCapacity = bufSize `quot` recordSize
 {-# INLINE sourceSortedRun #-}
 
 -- | @takeV n@ takes @n@ values from upstream and puts them into a vector.
@@ -232,27 +239,6 @@ readRecords v !idx s = loop idx 0
                | otherwise  = VM.write v vi (sub si) >>
                               loop (vi + 1) (si + recordSize)
 {-# INLINE readRecords #-}
-
--- | Same as @toRecords@ except that a mutable vector is returned.
-toRecordsMV
-    :: PrimMonad m
-    => BS.ByteString
-    -> m (VM.MVector (PrimState m) BS.ByteString)
-toRecordsMV s = do v <- VM.new count
-                   c <- readRecords v 0 s
-                   if c == count
-                     then return v
-                     else return $! VM.take c v
-  where
-    count = BS.length s `quot` recordSize
-{-# INLINE toRecordsMV #-}
-
--- | Groups the given bytestrings into records. Each record is assumed to be
--- @recordSize@ bytes. The given ByteString's length must be a multiple of
--- @recordSize@.
-toRecords :: BS.ByteString -> V.Vector BS.ByteString
-toRecords !s = V.create $ toRecordsMV s
-{-# INLINE toRecords #-}
 
 ------------------------------------------------------------------------------
 -- msort
