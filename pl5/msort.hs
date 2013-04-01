@@ -279,25 +279,22 @@ readRecords v !idx s = loop idx 0
 recordSize :: Int
 recordSize = 9
 
--- | A Conduit that reads ByteStrings from upstream (assuming them to be of
--- the given size) and outputs vectors of bytestrings.
-sortRecords
-    :: PrimMonad m
+-- | Reads blocks of records from upstream and puts them into separate
+-- bytestrings. Re-uses the same vector.
+--
+-- The argument specifies the maximum number of records a block can contain.
+toRecords
+    :: MonadIO m
     => Int
-    -> Conduit BS.ByteString m (VM.MVector (PrimState m) BS.ByteString)
-sortRecords blockSize = do
-    v <- lift $ VM.new count
-    awaitForever $ \s -> do
-        c <- lift $ do VM.clear v
-                       readRecords v 0 s
-        let v' = if c == count
-                  then v
-                  else VM.take c v
-        lift $ Intro.sort v'
-        yield v'
-  where
-        count = blockSize `quot` recordSize
-{-# INLINE sortRecords #-}
+    -> Conduit BS.ByteString m (VM.MVector RealWorld BS.ByteString)
+toRecords maxRecords = do
+    v <- liftIO $ VM.new maxRecords
+    CL.mapM $ \s -> liftIO $ do
+        VM.clear v
+        c <- readRecords v 0 s
+        if c == maxRecords
+          then return v
+          else return $! VM.take c v
 
 -- | @makeRuns input output length@ makes runs of length @length@ in @output@.
 -- @length@ specifies the number of records, not the number of bytes.
@@ -312,7 +309,8 @@ makeRuns
     -> IO Int
 makeRuns inFile outHandle runLength = do
     runResourceT $  sourceFile blockSize inFile
-                 $= transPipe liftIO (sortRecords blockSize)
+                 $= toRecords runLength
+                 $= transPipe liftIO (CL.iterM Intro.sort)
                  $= concatRecords runLength
                  $$ CB.sinkHandle outHandle
     pos <- fromInteger <$> IO.hTell outHandle
