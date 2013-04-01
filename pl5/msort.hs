@@ -6,14 +6,13 @@ module Main (main) where
 
 import           Control.Applicative          ((<$>))
 import           Control.Monad
-import           Control.Monad.Primitive      (PrimMonad, PrimState)
+import           Control.Monad.Primitive      (PrimMonad, PrimState, RealWorld)
 import           Control.Monad.State
 import           Control.Monad.Trans.Resource as Res
 import qualified Data.ByteString              as BS
 import qualified Data.ByteString.Internal     as BSI
 import           Data.Conduit
 import qualified Data.Conduit.Binary          as CB
-import qualified Data.Conduit.Internal        as CI
 import qualified Data.Conduit.List            as CL
 import           Data.Function                (on)
 import           Data.Maybe                   (fromJust, isNothing)
@@ -21,10 +20,10 @@ import           Data.Time.Clock.POSIX        (getPOSIXTime)
 import qualified Data.Vector                  as V
 import qualified Data.Vector.Algorithms.Intro as Intro
 import qualified Data.Vector.Mutable          as VM
-import           Data.Void                    (absurd)
 import           Data.Word                    (Word8)
 import           Foreign.ForeignPtr           (ForeignPtr, finalizeForeignPtr,
                                                withForeignPtr)
+import           Foreign.Ptr                  as Ptr
 import           Prelude                      hiding (lines)
 import           System.Directory             (doesFileExist, removeFile,
                                                renameFile)
@@ -50,20 +49,6 @@ hGetBuf handle !ptr !count = do
 ------------------------------------------------------------------------------
 -- Sources, Conduits, etc.
 ------------------------------------------------------------------------------
-
--- | Modifies an existing sink to count the number of items consumed by it.
-countSunk :: Monad m => Sink i m a -> Sink i m (a, Int)
-countSunk (CI.ConduitM pipe) = CI.ConduitM $ loop 0 pipe
-  where
-    loop !i p =
-        case p of
-            CI.HaveOutput _ _ o -> absurd o
-            CI.NeedInput rp rc  -> CI.NeedInput (loop (i + 1) . rp)
-                                                (\u -> (,i) <$> rc u)
-            CI.Done a           -> return (a, i)
-            CI.PipeM mp         -> lift mp >>= loop i
-            CI.Leftover p' _    -> loop i p'
-{-# INLINE countSunk #-}
 
 -- | Reads mutable vectors from upstream and yields their elements downstream.
 splatMV :: PrimMonad m => Conduit (VM.MVector (PrimState m) a) m a
@@ -183,6 +168,47 @@ range start step stop = loop start
         | otherwise = return ()
 {-# INLINE range #-}
 
+-- | Read vectors of bytestrings from upstream and concatenate each block's
+-- bytestrings into a single bytestring. The argument specfies the maximum
+-- number of bytestrings a vector can hold. If a vector holds more, they will
+-- be ignored.
+concatRecords
+    :: MonadResource m
+    => Int
+    -> Conduit (VM.MVector RealWorld BS.ByteString) m BS.ByteString
+concatRecords capacity =
+    bracketP (BSI.mallocByteString size) finalizeForeignPtr $ \ptr ->
+    transPipe liftIO (concatRecords' ptr capacity)
+  where
+    size = capacity * recordSize
+
+-- | Version of @concatRecords@ that operates on an existing pointer.
+concatRecords'
+    :: (MonadIO m, PrimMonad m)
+    => ForeignPtr Word8
+    -> Int
+    -> Conduit (VM.MVector (PrimState m) BS.ByteString) m BS.ByteString
+concatRecords' ptr capacity = awaitForever $ \v ->
+    yield v =$= splatMV =$= loop 0
+  where
+    size = capacity * recordSize
+
+    loop :: (MonadIO m, PrimMonad m)
+         => Int
+         -> Conduit BS.ByteString m BS.ByteString
+    loop i | i >= size = yield $! BSI.PS ptr 0 size
+           | otherwise = do
+                ms <- await
+                case ms of
+                    Nothing -> yield $! BSI.PS ptr 0 i
+                    Just (BSI.PS x s l) -> do
+                      liftIO $ withForeignPtr ptr $ \target ->
+                               withForeignPtr x   $ \source ->
+                               BSI.memcpy (target `Ptr.plusPtr` i)
+                                          (source `Ptr.plusPtr` s)
+                                          (fromIntegral l)
+                      loop (i + l)
+
 ------------------------------------------------------------------------------
 -- Utilities
 ------------------------------------------------------------------------------
@@ -284,15 +310,15 @@ makeRuns
     -> IO.Handle    -- ^ Target file to which sorted runs will be written
     -> Int          -- ^ Number of records in each sorted run
     -> IO Int
-makeRuns inFile outHandle runLength = runResourceT . fmap snd
-    $  sourceFile blockSize inFile
-    $= transPipe liftIO (sortRecords blockSize =$= splatMV)
-    $$ countSunk
-     $ CB.sinkHandle outHandle
+makeRuns inFile outHandle runLength = do
+    runResourceT $  sourceFile blockSize inFile
+                 $= transPipe liftIO (sortRecords blockSize)
+                 $= concatRecords runLength
+                 $$ CB.sinkHandle outHandle
+    pos <- fromInteger <$> IO.hTell outHandle
+    return $ pos `quot` recordSize
   -- Number of bytes consumed by @runLength@ records.
   where blockSize = runLength * recordSize
-
-
 {-# INLINE makeRuns #-}
 
 -- @mergeRuns fin runLength bufSize positions@ merges K runs (where K is the
