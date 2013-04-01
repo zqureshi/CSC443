@@ -239,10 +239,10 @@ readRecords v !idx s = loop idx 0
 
     sub i = substr i recordSize s
 
-    loop vi si | vi == vlen = return vi
-               | si >= slen = return vi
-               | otherwise  = VM.write v vi (sub si) >>
-                              loop (vi + 1) (si + recordSize)
+    loop !vi !si | vi == vlen = return vi
+                 | si >= slen = return vi
+                 | otherwise  = VM.write v vi (sub si) >>
+                                loop (vi + 1) (si + recordSize)
 {-# INLINE readRecords #-}
 
 ------------------------------------------------------------------------------
