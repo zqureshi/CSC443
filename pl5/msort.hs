@@ -417,7 +417,8 @@ main = do
                 -- k-way merge
                 groups $$ CL.mapM_ $ \pos ->
                   mergeRuns (thrd input) n bufSize pos
-                       $$ CB.sinkHandle (thrd output)
+                       $$ concatBS bufSize
+                       =$ CB.sinkHandle (thrd output)
 
                 -- Now have (n * k)-sorted
                 let newInput = output
