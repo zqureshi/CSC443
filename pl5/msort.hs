@@ -66,10 +66,10 @@ sourceHandle
     => Int          -- ^ Size of the buffer used to read blocks
     -> IO.Handle    -- ^ File Handle
     -> Producer m BS.ByteString
-sourceHandle bsize h =
+sourceHandle bsize h = do
+    liftIO $ IO.hSetBuffering h (IO.BlockBuffering (Just bsize))
     -- Allocate the block and ensure it is freed after we are done.
-    bracketP (BSI.mallocByteString bsize) finalizeForeignPtr $ \ptr ->
-    loop ptr
+    bracketP (BSI.mallocByteString bsize) finalizeForeignPtr loop
   where
     loop !ptr = do
         bs <- liftIO $ hGetBuf h ptr bsize
@@ -301,6 +301,7 @@ makeRuns
     -> Int          -- ^ Number of records in each sorted run
     -> IO Int
 makeRuns inFile outHandle runLength = do
+    IO.hSetBuffering outHandle (IO.BlockBuffering (Just blockSize))
     runResourceT $  sourceFile blockSize inFile
                  $= toRecords runLength
                  $= transPipe liftIO (CL.iterM Intro.sort =$= splatMV)
@@ -408,6 +409,13 @@ main = do
                 -> m (Res.ReleaseKey, FilePath, IO.Handle)
             loop !pass input output n | n >= totalRecords = return input
                                       | otherwise = do
+
+                liftIO $ do
+                    IO.hSetBuffering (thrd input)
+                                     (IO.BlockBuffering (Just bufSize))
+                    IO.hSetBuffering (thrd output)
+                                     (IO.BlockBuffering (Just bufSize))
+
                 let positions = range 0 (fromIntegral $ n * recordSize)
                                         (fromIntegral $ totalSize - 1)
                     groups = positions $= transPipe liftIO (groupV k)
