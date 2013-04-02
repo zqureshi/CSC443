@@ -168,46 +168,39 @@ range start step stop = loop start
         | otherwise = return ()
 {-# INLINE range #-}
 
--- | Read vectors of bytestrings from upstream and concatenate each block's
--- bytestrings into a single bytestring. The argument specfies the maximum
--- number of bytestrings a vector can hold. If a vector holds more, they will
--- be ignored.
-concatRecords
-    :: MonadResource m
-    => Int
-    -> Conduit (VM.MVector RealWorld BS.ByteString) m BS.ByteString
-concatRecords capacity =
-    bracketP (BSI.mallocByteString size) finalizeForeignPtr $ \ptr ->
-    transPipe liftIO (concatRecords' ptr capacity)
+-- | Read bytestrings from upstream, concatenate them into batches of
+-- bytestrings of the given size.
+concatBS :: MonadResource m => Int -> Conduit BS.ByteString m BS.ByteString
+concatBS size =
+    bracketP (BSI.mallocByteString size) finalizeForeignPtr (loop 0)
   where
-    size = capacity * recordSize
+    loop i ptr
+        | i >= size = do yield $! BSI.PS ptr 0 size
+                         loop 0 ptr
+        | otherwise = do
+             ms <- await
+             case ms of
+                 Nothing -> yield $! BSI.PS ptr 0 i
+                 Just bs ->
+                     if BS.length bs >= available
+                      then let (l, r) = BS.splitAt available bs
+                           in do newI <- cpy i l
+                                 leftover r
+                                 loop newI ptr
+                      else do newI <- cpy i bs
+                              loop newI ptr
+      where
+        available = size - i
 
--- | Version of @concatRecords@ that operates on an existing pointer.
-concatRecords'
-    :: (MonadIO m, PrimMonad m)
-    => ForeignPtr Word8
-    -> Int
-    -> Conduit (VM.MVector (PrimState m) BS.ByteString) m BS.ByteString
-concatRecords' ptr capacity = awaitForever $ \v ->
-    yield v =$= splatMV =$= loop 0
-  where
-    size = capacity * recordSize
-
-    loop :: (MonadIO m, PrimMonad m)
-         => Int
-         -> Conduit BS.ByteString m BS.ByteString
-    loop i | i >= size = yield $! BSI.PS ptr 0 size
-           | otherwise = do
-                ms <- await
-                case ms of
-                    Nothing -> yield $! BSI.PS ptr 0 i
-                    Just (BSI.PS x s l) -> do
-                      liftIO $ withForeignPtr ptr $ \target ->
-                               withForeignPtr x   $ \source ->
-                               BSI.memcpy (target `Ptr.plusPtr` i)
-                                          (source `Ptr.plusPtr` s)
-                                          (fromIntegral l)
-                      loop (i + l)
+        cpy :: MonadIO m => Int -> BS.ByteString -> m Int
+        cpy idx (BSI.PS x s l) = liftIO $
+            withForeignPtr ptr $ \target ->
+            withForeignPtr x   $ \source -> do
+            BSI.memcpy (target `Ptr.plusPtr` idx)
+                       (source `Ptr.plusPtr` s)
+                       (fromIntegral l)
+            return $! idx + l
+{-# INLINE concatBS #-}
 
 ------------------------------------------------------------------------------
 -- Utilities
@@ -310,8 +303,8 @@ makeRuns
 makeRuns inFile outHandle runLength = do
     runResourceT $  sourceFile blockSize inFile
                  $= toRecords runLength
-                 $= transPipe liftIO (CL.iterM Intro.sort)
-                 $= concatRecords runLength
+                 $= transPipe liftIO (CL.iterM Intro.sort =$= splatMV)
+                 $= concatBS blockSize
                  $$ CB.sinkHandle outHandle
     pos <- fromInteger <$> IO.hTell outHandle
     return $ pos `quot` recordSize
