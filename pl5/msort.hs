@@ -112,22 +112,18 @@ sourceSortedRun h !start !runLength bufSize =
         block <- liftIO $ IO.hSeek h IO.AbsoluteSeek pos
                        >> hGetBuf h ptr realBufSize
         unless (BS.null block) $ do
+            v' <- liftIO $ toRecords' v block
 
-            -- Read the block into a vector of records. The number of records
-            -- in the block can be less than the capacity.
-            c <- liftIO $ do VM.clear v
-                             readRecords v 0 block
-            let v' = if c == recordCapacity
-                       then v
-                       else VM.take c v
-
-                -- We need only up to @count@ of those records.
-                toYield  = VM.take count v'
+            -- We need only up to @count@ of those records.
+            let toYield  = VM.take count v'
                 newCount = count - VM.length toYield
+                newPos = pos + fromIntegral realBufSize
 
             -- Yield everything and move on.
-            yield toYield $= transPipe liftIO splatMV $$ CL.mapM_ yield
-            loop v ptr (pos + fromIntegral realBufSize) newCount
+            yield toYield $= transPipe liftIO splatMV
+                          $$ CL.mapM_ yield
+
+            loop v ptr newPos newCount
 
     -- Use a buffer size that is a multiple of recordSize closest to but less
     -- than the requested buffer size.
@@ -139,26 +135,30 @@ sourceSortedRun h !start !runLength bufSize =
     {-# INLINE recordCapacity #-}
 {-# INLINE sourceSortedRun #-}
 
--- | @takeV n@ takes @n@ values from upstream and puts them into a vector.
-takeV :: (Monad m, PrimMonad m) => Int -> Consumer a m (V.Vector a)
-takeV !n = (lift $! VM.new n) >>= loop 0
+-- | @groupV' i v@ returns a conduit that reads elements from upstream and
+-- puts groups of @i@ elements in the given mutable vector before yielding the
+-- vector.
+groupV' :: PrimMonad m
+        => Int
+        -> VM.MVector (PrimState m) a
+        -> Conduit a m (VM.MVector (PrimState m) a)
+groupV' !n v = lift (VM.clear v) >> loop 0
   where
-    loop i v
-        | i == n    = lift $! V.unsafeFreeze v
-        | otherwise =
-                do x <- await
-                   case x of
-                       Just x' -> do lift $! VM.write v i x'
-                                     loop (i + 1) v
-                       Nothing -> lift $! V.unsafeFreeze (VM.take i v)
-{-# INLINE takeV #-}
+    loop i | i == n    = do yield v
+                            lift (VM.clear v)
+                            loop 0
+           | otherwise = do x <- await
+                            case x of
+                                Nothing -> when (i > 0) $
+                                              yield $! VM.take i v
+                                Just x' -> do lift $! VM.write v i x'
+                                              loop $! i + 1
+{-# INLINE groupV' #-}
 
 -- | @groupV n@ takes values from upstream and puts them in groups of @n@ as
 -- vectors.
-groupV :: (Monad m, PrimMonad m) => Int -> Conduit a m (V.Vector a)
-groupV !n = loop
-  where loop = do v <- takeV n
-                  unless (V.null v) $! yield v >> loop
+groupV :: PrimMonad m => Int -> Conduit a m (V.Vector a)
+groupV !n = (lift (VM.new n) >>= groupV' n) =$= CL.mapM V.freeze
 {-# INLINE groupV #-}
 
 -- | @range start step step@ produces numbers from from @start@ to @stop@
@@ -277,13 +277,21 @@ readRecords v !idx s = loop idx 0
                                 loop (vi + 1) (si + recordSize)
 {-# INLINE readRecords #-}
 
-------------------------------------------------------------------------------
--- msort
-------------------------------------------------------------------------------
-
 -- Size of records being sorted in bytes. This includes the new line.
 recordSize :: Int
 recordSize = 9
+{-# INLINE recordSize #-}
+
+toRecords' :: PrimMonad m
+           => VM.MVector (PrimState m) BS.ByteString
+           -> BS.ByteString
+           -> m (VM.MVector (PrimState m) BS.ByteString)
+toRecords' v s = do VM.clear v
+                    c <- readRecords v 0 s
+                    if c == VM.length v
+                        then return v
+                        else return $! VM.take c v
+{-# INLINE toRecords' #-}
 
 -- | Reads blocks of records from upstream and puts them into separate
 -- bytestrings. Re-uses the same vector.
@@ -293,14 +301,13 @@ toRecords
     :: MonadIO m
     => Int
     -> Conduit BS.ByteString m (VM.MVector RealWorld BS.ByteString)
-toRecords maxRecords = do
-    v <- liftIO $ VM.new maxRecords
-    CL.mapM $ \s -> liftIO $ do
-        VM.clear v
-        c <- readRecords v 0 s
-        if c == maxRecords
-          then return v
-          else return $! VM.take c v
+toRecords maxRecords = do v <- liftIO $ VM.new maxRecords
+                          CL.mapM $ liftIO . toRecords' v
+{-# INLINE toRecords #-}
+
+------------------------------------------------------------------------------
+-- msort
+------------------------------------------------------------------------------
 
 -- | @makeRuns input output length@ makes runs of length @length@ in @output@.
 -- @length@ specifies the number of records, not the number of bytes.
