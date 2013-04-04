@@ -45,6 +45,7 @@ hGetBuf handle !ptr !count = do
     -- it would read only 86, reading the next 4 in the next iteration.
     bytesRead <- withForeignPtr ptr $ \p -> IO.hGetBuf handle p count
     return $! BSI.PS ptr 0 bytesRead
+{-# INLINE hGetBuf #-}
 
 ------------------------------------------------------------------------------
 -- Sources, Conduits, etc.
@@ -86,8 +87,6 @@ sourceHandle bsize h = do
 -- result in pain and misery.
 sourceFile :: MonadResource m => Int -> FilePath -> Producer m BS.ByteString
 sourceFile bsize fp =
-    -- Open the file and allocate the block. Ensure they're both freed once
-    -- we're done here.
     -- Open the file and ensure it is closed after we are done.
     bracketP (IO.openBinaryFile fp IO.ReadMode) IO.hClose $
     sourceHandle bsize
@@ -130,10 +129,14 @@ sourceSortedRun h !start !runLength bufSize =
             yield toYield $= transPipe liftIO splatMV $$ CL.mapM_ yield
             loop v ptr (pos + fromIntegral realBufSize) newCount
 
-    -- Change buffer size to the closest multiple of the recordSize that is
-    -- less than the original buffer size.
+    -- Use a buffer size that is a multiple of recordSize closest to but less
+    -- than the requested buffer size.
     realBufSize = recordCapacity * recordSize
+    {-# INLINE realBufSize #-}
+
+    -- Maximum number of records that can be stored in the buffer.
     recordCapacity = bufSize `quot` recordSize
+    {-# INLINE recordCapacity #-}
 {-# INLINE sourceSortedRun #-}
 
 -- | @takeV n@ takes @n@ values from upstream and puts them into a vector.
@@ -191,6 +194,7 @@ concatBS size =
                               loop newI ptr
       where
         available = size - i
+        {-# INLINE available #-}
 
         cpy :: MonadIO m => Int -> BS.ByteString -> m Int
         cpy idx (BSI.PS x s l) = liftIO $
@@ -200,6 +204,7 @@ concatBS size =
                        (source `Ptr.plusPtr` s)
                        (fromIntegral l)
             return $! idx + l
+        {-# INLINE cpy #-}
 {-# INLINE concatBS #-}
 
 ------------------------------------------------------------------------------
@@ -241,6 +246,7 @@ substr i n ps@(BSI.PS x s l)
     | i <= 0 && n >= l = ps
     | i >= l || l <= 0 = BS.empty
     | otherwise        = BSI.PS x (s + i) n
+{-# INLINE substr #-}
 
 -- | Read records from the given bytestring into the given mutable vector
 -- starting at the given index.
@@ -259,8 +265,11 @@ readRecords v !idx s = loop idx 0
   where
     vlen = VM.length v
     slen = BS.length s
+    {-# INLINE vlen #-}
+    {-# INLINE slen #-}
 
     sub i = substr i recordSize s
+    {-# INLINE sub #-}
 
     loop !vi !si | vi == vlen = return vi
                  | si >= slen = return vi
@@ -315,6 +324,7 @@ makeRuns inFile outHandle runLength = do
     return $ pos `quot` recordSize
   -- Number of bytes consumed by @runLength@ records.
   where blockSize = runLength * recordSize
+        {-# INLINE blockSize #-}
 {-# INLINE makeRuns #-}
 
 -- @mergeRuns fin runLength bufSize positions@ merges K runs (where K is the
@@ -341,11 +351,13 @@ mergeRuns h runLen bsize positions = do
   where
     -- Source that yields elements of the given run.
     runIterator !pos = sourceSortedRun h pos runLen bsize
+    {-# INLINE runIterator #-}
 
     cmp Nothing Nothing   = EQ
     cmp Nothing _         = GT
     cmp _       Nothing   = LT
     cmp (Just a) (Just b) = a `compare` b
+    {-# INLINE cmp #-}
 
     loop !l = do
         closedSources <- V.foldM' closeExpired [] (V.indexed l)
@@ -363,6 +375,7 @@ mergeRuns h runLen bsize positions = do
     closeExpired l (i, (Just r, Nothing)) = lift (r $$+- return ())
                                          >> return (i:l)
     closeExpired l _ = return l
+    {-# INLINE closeExpired #-}
 {-# INLINE mergeRuns #-}
 
 
