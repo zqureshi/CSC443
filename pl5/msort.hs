@@ -211,6 +211,10 @@ now :: IO Int
 now = truncate . (* 1000) <$> getPOSIXTime
 {-# INLINE now #-}
 
+fst3 :: (a, b, c) -> a
+fst3 (a, _, _) = a
+{-# INLINE fst3 #-}
+
 -- | Get the third element of the tuple.
 thrd :: (a, b, c) -> c
 thrd (_, _, c) = c
@@ -431,6 +435,7 @@ main = do
                 -- Now have (n * k)-sorted
                 let newInput = output
                 newOutput <- allocateTempFile "run.txt"
+                Res.release $ fst3 input
 
                 loop (pass + 1) newInput newOutput (n * k)
 
