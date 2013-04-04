@@ -16,3 +16,7 @@ collect_K
 collect_mem
 collect_file
 collect_btree
+*.aux
+*.hp
+*.prof
+*.ps
