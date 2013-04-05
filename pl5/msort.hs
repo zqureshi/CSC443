@@ -504,22 +504,35 @@ main = do
         -- sort it on its own.
 
         -- Sort each run concurrently and get the final run info
-        finalRuns <- forM sortedRuns $ \runInfo -> do
+        finalRunMVars <- forM sortedRuns $ \runInfo -> do
             final <- liftIO Conc.newEmptyMVar
             Res.resourceForkIO $
                 msort runInfo runLength bufSize k >>=
                 liftIO . Conc.putMVar final
-            liftIO $ Conc.takeMVar final
+            return final
+
+        finalRuns <- mapM (liftIO . Conc.takeMVar) finalRunMVars
 
         -- Now have @numCapabilities@ files that are fully sorted. Can merge
         -- them all in a single pass.
 
-        -- TODO Merge final runs and rename file
+        let runIterator RI{..} = sourceSortedRun riHandle 0
+                                                 riRecordCount bufSize
+            finalSources = V.fromList $ map runIterator finalRuns
 
+        -- When there were multiple concurrent sorters, merge the final
+        -- outputs in one pass and rename the final temporary file to the
+        -- output file.
+        when (numCapabilities > 1) $ do
+            (_, outPath, outHandle) <- allocateTempFile "run.txt"
+            sortSources finalSources $$ concatBS bufSize
+                                     =$ CB.sinkHandle outHandle
+            liftIO $ IO.hClose outHandle >> renameFile outPath outFile
+
+        -- If there was only one sorter, use its result.
         unless (numCapabilities > 1) $ do
             let RI{..} = head finalRuns
-            liftIO $ IO.hClose riHandle
-                  >> renameFile riFilePath outFile
+            liftIO $ IO.hClose riHandle >> renameFile riFilePath outFile
 
         endTime <- liftIO now
         liftIO $ putStrLn $ printf "TIME: %d milliseconds"
