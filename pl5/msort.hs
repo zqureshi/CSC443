@@ -1,10 +1,13 @@
 {-# LANGUAGE BangPatterns          #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RecordWildCards       #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TupleSections         #-}
 module Main (main) where
 
 import           Control.Applicative          ((<$>))
+import qualified Control.Concurrent           as Conc
 import           Control.Monad
 import           Control.Monad.Primitive      (PrimMonad, PrimState, RealWorld)
 import           Control.Monad.State
@@ -60,36 +63,30 @@ splatMV = awaitForever $ \v -> loop (VM.length v) v 0
                                    loop size v $! i + 1
 {-# INLINE splatMV #-}
 
--- | Similar to @sourceFile@ except that this can operate on an existing
--- handle.
+-- | @sourceHandle total buf h@ reads a total of @total@ bytes from @h@ in
+-- blocks of @buf@ bytes.
 sourceHandle
     :: MonadResource m
-    => Int          -- ^ Size of the buffer used to read blocks
-    -> IO.Handle    -- ^ File Handle
-    -> Producer m BS.ByteString
-sourceHandle bsize h = do
+    => Int          -- ^ Total number of bytes to read
+    -> Int          -- ^ Size of buffer to which bytes will be read
+    -> IO.Handle    -- ^ Handle to input file
+    -> Source m BS.ByteString
+sourceHandle total bsize h = do
     liftIO $ IO.hSetBuffering h (IO.BlockBuffering (Just bsize))
-    -- Allocate the block and ensure it is freed after we are done.
-    bracketP (BSI.mallocByteString bsize) finalizeForeignPtr loop
+    bracketP (BSI.mallocByteString bsize) finalizeForeignPtr (loop total)
   where
-    loop !ptr = do
-        bs <- liftIO $ hGetBuf h ptr bsize
-        unless (BS.null bs) $
-            yield bs >> loop ptr
+    loop toRead ptr
+        | toRead <= 0 = when (toRead < 0) $ liftIO $
+                            IO.hSeek h IO.RelativeSeek (fromIntegral toRead)
+        | otherwise   = do
+            -- Read the required number of bytes
+            bs <- liftIO $ hGetBuf h ptr bsize
+            unless (BS.null bs) $ do
+                yield $ if toRead < bsize
+                          then BS.take toRead bs
+                          else bs
+                loop (toRead - bsize) ptr
 {-# INLINE sourceHandle #-}
-
--- | @sourceFile bsize fp@ sends blocks of bytestrings of size @bsize@
--- downstream.
---
--- This is similar to @Conduit.Binary.sourceFile@ except that the same block
--- of memory is re-used. So, only one block is accessible at a time. Trying to
--- group multiple blocks returned by this without copying them will only
--- result in pain and misery.
-sourceFile :: MonadResource m => Int -> FilePath -> Producer m BS.ByteString
-sourceFile bsize fp =
-    -- Open the file and ensure it is closed after we are done.
-    bracketP (IO.openBinaryFile fp IO.ReadMode) IO.hClose $
-    sourceHandle bsize
 
 -- | @sourceSortedRun h start runLen bufSize@ iterates through the sorted run
 -- of size @runLen@ in the file @h@ starting at offset @start@. A buffer of
@@ -216,15 +213,6 @@ now :: IO Int
 now = truncate . (* 1000) <$> getPOSIXTime
 {-# INLINE now #-}
 
-fst3 :: (a, b, c) -> a
-fst3 (a, _, _) = a
-{-# INLINE fst3 #-}
-
--- | Get the third element of the tuple.
-thrd :: (a, b, c) -> c
-thrd (_, _, c) = c
-{-# INLINE thrd #-}
-
 -- | Allocate a temporary file under a Resource monad. They file will be
 -- deleted when the key is released.
 allocateTempFile
@@ -314,24 +302,31 @@ toRecords maxRecords = do v <- liftIO $ VM.new maxRecords
 --
 -- This is pass 0 of the external merge sort algorithm.
 --
--- The total number of records written is returned
+
+-- | @makeRuns input totalRecords runLength@ makes runs of length @runLength@
+-- with up to @totalRecords@ from @input@ into a temporary file.
+--
+-- A @RunInfo@ is returned with information about the run.
 makeRuns
-    :: FilePath     -- ^ Path to the file containing the unsorted data
-    -> IO.Handle    -- ^ Target file to which sorted runs will be written
-    -> Int          -- ^ Number of records in each sorted run
-    -> IO Int
-makeRuns inFile outHandle runLength = do
-    IO.hSetBuffering outHandle (IO.BlockBuffering (Just blockSize))
-    runResourceT $  sourceFile blockSize inFile
-                 $= toRecords runLength
-                 $= transPipe liftIO (CL.iterM Intro.sort =$= splatMV)
-                 $= concatBS blockSize
-                 $$ CB.sinkHandle outHandle
-    pos <- fromInteger <$> IO.hTell outHandle
-    return $ pos `quot` recordSize
-  -- Number of bytes consumed by @runLength@ records.
-  where blockSize = runLength * recordSize
-        {-# INLINE blockSize #-}
+    :: MonadResource m
+    => IO.Handle    -- ^ Handle to the input file
+    -> Int          -- ^ Total number of records
+    -> Int          -- ^ Number of records in each run
+    -> m RunInfo
+makeRuns inFile recordCount runLength = do
+    (outKey, outPath, outHandle) <- allocateTempFile "run.txt"
+    liftIO $ IO.hSetBuffering outHandle (IO.BlockBuffering (Just blockSize))
+    sourceHandle totalSize blockSize inFile
+        $= toRecords runLength
+        $= transPipe liftIO (CL.iterM Intro.sort =$= splatMV)
+        $= concatBS blockSize
+        $$ CB.sinkHandle outHandle
+    return $! RI outKey outPath outHandle recordCount
+  where
+    totalSize = recordCount * recordSize
+    blockSize = runLength * recordSize
+    {-# INLINE totalSize #-}
+    {-# INLINE blockSize #-}
 {-# INLINE makeRuns #-}
 
 -- @mergeRuns fin runLength bufSize positions@ merges K runs (where K is the
@@ -385,6 +380,68 @@ mergeRuns h runLen bsize positions = do
     {-# INLINE closeExpired #-}
 {-# INLINE mergeRuns #-}
 
+-- | Returns the number of records in the given file.
+getRecordCount :: MonadIO m => IO.Handle -> m Int
+getRecordCount h = liftIO $ do
+    oldPosition <- IO.hTell h
+    IO.hSeek h IO.SeekFromEnd 0
+    newPosition <- fromInteger <$> IO.hTell h
+    IO.hSeek h IO.AbsoluteSeek oldPosition
+    return $! newPosition `quot` recordSize
+
+data RunInfo = RI { riReleaseKey  :: Res.ReleaseKey
+                  , riFilePath    :: IO.FilePath
+                  , riHandle      :: IO.Handle
+                  , riRecordCount :: Int
+                  }
+
+-- | Finish sorting the given run.
+msort :: forall m. MonadResource m
+      => RunInfo    -- ^ Information about the run
+      -> Int        -- ^ @n@ where the file is @n@-sorted
+      -> Int        -- ^ Buffer size used while sorting
+      -> Int        -- ^ @k@-way merge
+      -> m RunInfo
+msort runInfo runLength bufSize k = loop 1 runInfo runLength
+  where
+    totalSize    = totalRecords * recordSize
+    totalRecords = riRecordCount runInfo
+    {-# INLINE totalSize    #-}
+    {-# INLINE totalRecords #-}
+
+    loop :: Int -> RunInfo -> Int -> m RunInfo
+    loop !pass input n
+        | n >= totalRecords = return input
+        | otherwise         = do
+            (outKey, outPath, outHandle) <- allocateTempFile "run.txt"
+            liftIO $ do
+                putStrLn $ printf "Pass %d" pass
+                IO.hSetBuffering inHandle
+                                 (IO.BlockBuffering (Just bufSize))
+                IO.hSetBuffering outHandle
+                                 (IO.BlockBuffering (Just bufSize))
+
+            let positions = range 0 (fromIntegral $ n * recordSize)
+                                    (fromIntegral $  totalSize - 1)
+                groups    = positions $= transPipe liftIO (groupV k)
+
+            -- Perform a k-way merge
+            groups $$ CL.mapM_ $ \pos ->
+                mergeRuns inHandle n bufSize pos
+                   $$ concatBS bufSize
+                   =$ CB.sinkHandle outHandle
+
+            Res.release $ riReleaseKey input
+
+            -- Now have (n * k)-sorted.
+            let newInput = input { riReleaseKey = outKey
+                                 , riFilePath   = outPath
+                                 , riHandle     = outHandle
+                                 }
+            loop (pass + 1) newInput (n * k)
+          where
+            inHandle = riHandle input
+            {-# INLINE inHandle #-}
 
 main :: IO ()
 main = do
@@ -395,6 +452,11 @@ main = do
         putStrLn $ progName ++
                    " <input file> <output file> <memory capacity> <k>"
         exitFailure
+
+    numCapabilities <- Conc.getNumCapabilities
+    when (numCapabilities > 1) $
+        putStrLn $ printf "Will run %d instances concurrently."
+                          numCapabilities
 
     let inFile:outFile:rest = args
         memCapacity         = read (head rest) :: Int
@@ -412,59 +474,46 @@ main = do
                       k bufSize runLength
 
     runResourceT $ do
-        runFile@(_, _, rfile) <- allocateTempFile "run.txt"
-
+        (inputKey, inputHandle)
+                     <- Res.allocate (IO.openBinaryFile inFile IO.ReadMode)
+                                      IO.hClose
+        totalRecords <- getRecordCount inputHandle
+        liftIO $ putStrLn $ printf "Sorting %d records." totalRecords
         startTime <- liftIO now
 
-        -- Pass 0
-        totalRecords <- liftIO $ makeRuns inFile rfile runLength
-        -- File is now @runLength@-sorted.
+        -- We are going to run @numCapabilities@ concurrent sorters. So, the
+        -- records are divied up equally amongst all sorters except the last
+        -- one which will take the extra ones as well.
+        let (recEach, recExtra) = totalRecords `quotRem` numCapabilities
+            procRecordCounts = replicate (numCapabilities - 1) recEach
+                                 ++ [recEach + recExtra]
 
-        liftIO $ putStrLn $ printf "Pass 0: %d records" totalRecords
+        -- Pass 0: Make @runLength@-sorted runs for each instance.
+        sortedRuns <- forM procRecordCounts $ \recordCount ->
+            makeRuns inputHandle recordCount runLength
+        Res.release inputKey
 
-        let totalSize = totalRecords * recordSize
+        -- We now have @runLength@-sorted runs for each instance which can
+        -- sort it on its own.
 
-            loop
-                :: MonadResource m
-                => Int
-                -> (Res.ReleaseKey, FilePath, IO.Handle)
-                -> (Res.ReleaseKey, FilePath, IO.Handle)
-                -> Int
-                -> m (Res.ReleaseKey, FilePath, IO.Handle)
-            loop !pass input output n | n >= totalRecords = return input
-                                      | otherwise = do
+        -- Sort each run concurrently and get the final run info
+        finalRuns <- forM sortedRuns $ \runInfo -> do
+            final <- liftIO Conc.newEmptyMVar
+            Res.resourceForkIO $
+                msort runInfo runLength bufSize k >>=
+                liftIO . Conc.putMVar final
+            liftIO $ Conc.takeMVar final
 
-                liftIO $ do
-                    IO.hSetBuffering (thrd input)
-                                     (IO.BlockBuffering (Just bufSize))
-                    IO.hSetBuffering (thrd output)
-                                     (IO.BlockBuffering (Just bufSize))
+        -- Now have @numCapabilities@ files that are fully sorted. Can merge
+        -- them all in a single pass.
 
-                let positions = range 0 (fromIntegral $ n * recordSize)
-                                        (fromIntegral $ totalSize - 1)
-                    groups = positions $= transPipe liftIO (groupV k)
+        -- TODO Merge final runs and rename file
 
-                liftIO $ putStrLn $ printf "Pass %d" pass
-
-                -- k-way merge
-                groups $$ CL.mapM_ $ \pos ->
-                  mergeRuns (thrd input) n bufSize pos
-                       $$ concatBS bufSize
-                       =$ CB.sinkHandle (thrd output)
-
-                -- Now have (n * k)-sorted
-                let newInput = output
-                newOutput <- allocateTempFile "run.txt"
-                Res.release $ fst3 input
-
-                loop (pass + 1) newInput newOutput (n * k)
-
-        targetFile <- allocateTempFile "run.txt"
-        (_, sortedp, sortedh) <- loop 1 runFile targetFile runLength
-
-        liftIO $ IO.hClose sortedh
-              >> renameFile sortedp outFile
+        unless (numCapabilities > 1) $ do
+            let RI{..} = head finalRuns
+            liftIO $ IO.hClose riHandle
+                  >> renameFile riFilePath outFile
 
         endTime <- liftIO now
-        liftIO . putStrLn $ printf "TIME: %d milliseconds" (endTime - startTime)
-
+        liftIO $ putStrLn $ printf "TIME: %d milliseconds"
+                                   (endTime - startTime)
