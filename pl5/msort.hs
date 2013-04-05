@@ -203,6 +203,12 @@ concatBS size =
 -- Utilities
 ------------------------------------------------------------------------------
 
+-- | A strict version of @putMVar@ that accepts a monad operation that
+-- produces the output.
+putMVarM' :: MonadIO m => Conc.MVar a -> m a -> m ()
+putMVarM' v m = do !x <- m
+                   liftIO $! Conc.putMVar v x
+
 -- | Get the current system time in milliseconds.
 now :: IO Int
 now = truncate . (* 1000) <$> getPOSIXTime
@@ -500,14 +506,13 @@ main = do
         -- sort it on its own.
 
         -- Sort each run concurrently and get the final run info
-        finalRunMVars <- forM sortedRuns $ \runInfo -> do
+        !finalRunMVars <- forM sortedRuns $ \runInfo -> do
             final <- liftIO Conc.newEmptyMVar
-            Res.resourceForkIO $
-                msort runInfo runLength bufSize k >>=
-                liftIO . Conc.putMVar final
+            Res.resourceForkIO $ putMVarM' final $
+                msort runInfo runLength bufSize k
             return final
 
-        finalRuns <- mapM (liftIO . Conc.takeMVar) finalRunMVars
+        !finalRuns <- mapM (liftIO . Conc.takeMVar) finalRunMVars
 
         -- Now have @numCapabilities@ files that are fully sorted. Can merge
         -- them all in a single pass.
