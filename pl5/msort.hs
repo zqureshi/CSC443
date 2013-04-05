@@ -18,7 +18,6 @@ import           Data.Conduit
 import qualified Data.Conduit.Binary          as CB
 import qualified Data.Conduit.List            as CL
 import           Data.Function                (on)
-import           Data.Maybe                   (fromJust, isNothing)
 import           Data.Time.Clock.POSIX        (getPOSIXTime)
 import qualified Data.Vector                  as V
 import qualified Data.Vector.Algorithms.Intro as Intro
@@ -329,6 +328,42 @@ makeRuns inFile recordCount runLength = do
     {-# INLINE blockSize #-}
 {-# INLINE makeRuns #-}
 
+-- | Given a vector of sources that yield elemnts in-order, return a source
+-- that combines and yields the elements of all the sources in-order.
+sortSources
+    :: (Monad m, Ord a)
+    => V.Vector (Source m a)
+    -> Source m a
+sortSources sources = do
+    sourcesAndValues <- lift $! V.forM sources $ \s -> do
+                                    (s', v) <- s $$+ CL.head
+                                    return (Just s', v)
+    loop sourcesAndValues
+  where
+    cmp Nothing  Nothing  = EQ
+    cmp Nothing  _        = GT
+    cmp _        Nothing  = LT
+    cmp (Just a) (Just b) = a `compare` b
+    {-# INLINE cmp #-}
+
+    loop !l = do
+        closedSources <- V.foldM' closeExpired [] (V.indexed l)
+        let idx        = V.minIndexBy (cmp `on` snd) l
+        case l V.! idx of
+          (_, Nothing) -> return ()
+          (Just src,   Just val) -> do
+            yield val
+            (newsrc, newval) <- lift $! src $$++ CL.head
+            let updates = (idx, (Just newsrc, newval)):
+                          map (, (Nothing, Nothing)) closedSources
+            loop $! l V.// updates
+
+    closeExpired l (i, (Just r, Nothing)) = lift (r $$+- return ())
+                                         >> return (i:l)
+    closeExpired l _                      = return       l
+    {-# INLINE closeExpired #-}
+{-# INLINE sortSources #-}
+
 -- @mergeRuns fin runLength bufSize positions@ merges K runs (where K is the
 -- length of @positions@) of @runLength@ records each using a @bufSize@ byte
 -- buffer.
@@ -344,40 +379,12 @@ mergeRuns
     -> Int              -- ^ Buffer size to use to read from each sorted run
     -> V.Vector Integer -- ^ List of starting positions of each run
     -> Source m BS.ByteString
-mergeRuns h runLen bsize positions = do
-    let sources = V.map runIterator positions
-    sourcesAndValues <- lift $! V.forM sources $ \s -> do
-                                    (s', v) <- s $$+ CL.head
-                                    return (Just s', v)
-    loop sourcesAndValues
+mergeRuns h runLen bsize positions =
+    sortSources $ V.map runIterator positions
   where
     -- Source that yields elements of the given run.
     runIterator !pos = sourceSortedRun h pos runLen bsize
     {-# INLINE runIterator #-}
-
-    cmp Nothing Nothing   = EQ
-    cmp Nothing _         = GT
-    cmp _       Nothing   = LT
-    cmp (Just a) (Just b) = a `compare` b
-    {-# INLINE cmp #-}
-
-    loop !l = do
-        closedSources <- V.foldM' closeExpired [] (V.indexed l)
-        let !idx = V.minIndexBy (cmp `on` snd) l
-            !(src, val) = l V.! idx
-        unless (isNothing val) $ do
-            yield (fromJust val)
-            (newsrc, newval) <- lift $! fromJust src $$++ CL.head
-            let updates = (idx, (Just newsrc, newval)):
-                          map (, (Nothing, Nothing)) closedSources
-            loop $! l V.// updates
-
-    -- Close expired resumable streams and accumulate a list of indexes of
-    -- those streams.
-    closeExpired l (i, (Just r, Nothing)) = lift (r $$+- return ())
-                                         >> return (i:l)
-    closeExpired l _ = return l
-    {-# INLINE closeExpired #-}
 {-# INLINE mergeRuns #-}
 
 -- | Returns the number of records in the given file.
