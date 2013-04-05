@@ -72,19 +72,15 @@ sourceHandle
     -> Source m BS.ByteString
 sourceHandle total bsize h = do
     liftIO $ IO.hSetBuffering h (IO.BlockBuffering (Just bsize))
-    bracketP (BSI.mallocByteString bsize) finalizeForeignPtr (loop total)
+    bracketP (BSI.mallocByteString bsize) finalizeForeignPtr (loop 0)
   where
-    loop toRead ptr
-        | toRead <= 0 = when (toRead < 0) $ liftIO $
-                            IO.hSeek h IO.RelativeSeek (fromIntegral toRead)
-        | otherwise   = do
-            -- Read the required number of bytes
-            bs <- liftIO $ hGetBuf h ptr bsize
+    loop readb ptr
+        | readb >= total = return ()
+        | otherwise     = do
+            bs <- liftIO $ hGetBuf h ptr (min bsize (total - readb))
             unless (BS.null bs) $ do
-                yield $ if toRead < bsize
-                          then BS.take toRead bs
-                          else bs
-                loop (toRead - bsize) ptr
+                yield bs
+                loop (readb + bsize) ptr
 {-# INLINE sourceHandle #-}
 
 -- | @sourceSortedRun h start runLen bufSize@ iterates through the sorted run
